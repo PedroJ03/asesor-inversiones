@@ -1,0 +1,6 @@
+[
+  {"symbol": "AE38C", "px_bid": 75.67, "px_ask": 75.8, "c": 75.8, "pct_change": 0.26},
+  {"symbol": "AE38D", "px_bid": 120400.0, "px_ask": 120560.0, "c": 120560.0, "pct_change": 0.01},
+  {"symbol": "AL30D", "px_bid": 950.0, "px_ask": 960.0, "c": 955.0, "pct_change": -0.5},
+  {"symbol": "GD30D", "px_bid": 800.0, "px_ask": 810.0, "c": 805.0, "pct_change": 0.2}
+]

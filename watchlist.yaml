@@ -1,0 +1,26 @@
+usa:
+  - symbol: SPY
+    label: S&P 500 (SPY)
+  - symbol: QQQ
+    label: Nasdaq 100 (QQQ)
+  - symbol: DIA
+    label: Dow Jones (DIA)
+  - symbol: AAPL
+    label: Apple
+  - symbol: MSFT
+    label: Microsoft
+  - symbol: NVDA
+    label: NVIDIA
+dolares:
+  - oficial
+  - blue
+  - bolsa
+  - contadoconliqui
+bonos:
+  - AL30D
+  - GD30D
+cripto:
+  - id: bitcoin
+    label: Bitcoin
+  - id: ethereum
+    label: Ethereum

@@ -1,0 +1,26 @@
+[
+  {
+    "moneda": "USD",
+    "casa": "oficial",
+    "nombre": "Oficial",
+    "compra": 1480,
+    "venta": 1530,
+    "fechaActualizacion": "2026-09-03T18:55:00.000Z"
+  },
+  {
+    "moneda": "USD",
+    "casa": "blue",
+    "nombre": "Blue",
+    "compra": 1525,
+    "venta": 1545,
+    "fechaActualizacion": "2026-09-03T19:00:00.000Z"
+  },
+  {
+    "moneda": "USD",
+    "casa": "bolsa",
+    "nombre": "Bolsa",
+    "compra": 1510,
+    "venta": 1520,
+    "fechaActualizacion": "2026-09-03T19:05:00.000Z"
+  }
+]

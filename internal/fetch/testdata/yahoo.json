@@ -1,0 +1,17 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "AAPL",
+          "regularMarketTime": 1788465601,
+          "regularMarketPrice": 328.21,
+          "regularMarketChangePercent": 1.0,
+          "chartPreviousClose": 325.0,
+          "longName": "Apple Inc."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reporte diario - {{.DateString}}</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --text: #1f2328;
+      --muted: #5f6b7a;
+      --border: #d1d9e0;
+      --positive: #1a7f37;
+      --positive-bg: #d4edda;
+      --negative: #cf222e;
+      --negative-bg: #ffebe9;
+      --accent: #0969da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1rem;
+      margin: -1rem -1rem 1rem -1rem;
+    }
+    h1 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1.35rem;
+    }
+    .date {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .warnings {
+      margin: 0.75rem 0 0 0;
+      padding: 0.75rem 1rem;
+      background: #fff8c5;
+      border: 1px solid #d4a72c;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    h2 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.1rem;
+      color: var(--accent);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 0.6rem 0.4rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    td.numeric, th.numeric {
+      text-align: right;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .positive {
+      color: var(--positive);
+      background: var(--positive-bg);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .negative {
+      color: var(--negative);
+      background: var(--negative-bg);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    footer {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--accent); }
+    footer ul { margin: 0.25rem 0; padding-left: 1.25rem; }
+    .disclaimer { margin-top: 0.75rem; font-size: 0.8rem; }
+    @media (max-width: 480px) {
+      h1 { font-size: 1.15rem; }
+      section { padding: 0.75rem; }
+      th, td { padding: 0.5rem 0.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Reporte diario de mercado</h1>
+      <p class="date">{{.DateString}}</p>
+      {{if .Warnings}}
+      <ul class="warnings">
+        {{range .Warnings}}<li>{{.}}</li>{{end}}
+      </ul>
+      {{end}}
+    </header>
+
+    <section>
+      <h2>Estados Unidos</h2>
+      <table>
+        <thead>
+          <tr><th>Activo</th><th class="numeric">Precio</th><th class="numeric">Variación</th></tr>
+        </thead>
+        <tbody>
+          {{range .USA}}
+          <tr>
+            <td>{{.Name}}<br><span class="muted">{{.Symbol}}</span></td>
+            <td class="numeric">{{price .Price .Currency}}</td>
+            <td class="numeric">{{pct .ChangePct}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Dólares</h2>
+      <table>
+        <thead>
+          <tr><th>Casa</th><th class="numeric">Compra</th><th class="numeric">Venta</th></tr>
+        </thead>
+        <tbody>
+          {{range .Dolares}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td class="numeric">{{price .Bid .Currency}}</td>
+            <td class="numeric">{{price .Ask .Currency}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Bonos soberanos</h2>
+      <table>
+        <thead>
+          <tr><th>Bono</th><th class="numeric">Precio</th><th class="numeric">Variación</th><th>Moneda</th></tr>
+        </thead>
+        <tbody>
+          {{range .Bonos}}
+          <tr>
+            <td>{{.Symbol}}</td>
+            <td class="numeric">{{price .Price .Currency}}</td>
+            <td class="numeric">{{pct .ChangePct}}</td>
+            <td>{{if eq .Currency "USD"}}u$s{{else}}$ARS{{end}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Criptomonedas</h2>
+      <table>
+        <thead>
+          <tr><th>Activo</th><th class="numeric">Precio</th><th class="numeric">Variación 24h</th></tr>
+        </thead>
+        <tbody>
+          {{range .Cripto}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td class="numeric">{{price .Price "USD"}}</td>
+            <td class="numeric">{{pct .ChangePct}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      <p><strong>Fuentes</strong></p>
+      <ul>
+        <li>Acciones y ETFs USA: <a href="https://finance.yahoo.com/">Yahoo Finance</a> (uso no comercial, puede ser reemplazado).</li>
+        <li>Dólares argentinos: <a href="https://dolarapi.com/">dolarapi.com</a>.</li>
+        <li>Bonos soberanos: <a href="https://data912.com/">data912.com</a>.</li>
+        <li>Criptomonedas: <a href="https://www.coingecko.com/">CoinGecko</a>.</li>
+      </ul>
+      <p class="disclaimer">Cotizaciones con fines informativos. No constituyen recomendación de inversión. Los precios reflejan el momento de consulta de cada fuente.</p>
+    </footer>
+  </div>
+</body>
+</html>
