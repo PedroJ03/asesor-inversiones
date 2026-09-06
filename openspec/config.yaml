@@ -1,0 +1,48 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Go 1.26.6 — single module github.com/PedroJ03/asesor-inversiones
+  Architecture: cmd/report CLI; internal/{config,fetch,store,render}; fetch.Provider interface with Yahoo/dolarapi/data912/CoinGecko providers; SQLite (modernc.org/sqlite); embedded mobile-first HTML template (Spanish UI)
+  Testing: go test ./... — table-driven unit tests with offline JSON fixtures; manual live smoke via go run ./cmd/report
+  Style: standard Go (gofmt, go vet); English code/comments; Spanish only for report UI copy
+
+# strict_tdd fails closed: single Go module and `go test ./...` runs green from the
+# workspace root covering every in-scope package, but no workspace-declared test
+# target exists (no Makefile/CI/package script). Declaring a test target (e.g. a
+# Makefile `test:` running `go test ./...`) enables strict TDD on next init.
+strict_tdd: false
+
+projects:
+  - path: .
+    stack: go
+    test_command: go test ./...
+    coverage_command: go test -cover ./...
+    formatter: gofmt
+    linter: go vet ./...
+    type_checker: go build ./...
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Document architecture decisions with rationale
+    - Keep data sources swappable behind the fetch.Provider interface
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns
+      - New data sources must implement fetch.Provider; never leak provider types past internal/fetch
+    tdd: false
+    test_command: "go test ./..."
+  verify:
+    test_command: "go test ./..."
+    build_command: "go build ./..."
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
