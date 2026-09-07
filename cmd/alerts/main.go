@@ -3,16 +3,41 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/PedroJ03/asesor-inversiones/internal/alert"
+	"github.com/PedroJ03/asesor-inversiones/internal/config"
 	"github.com/PedroJ03/asesor-inversiones/internal/store"
 )
 
-const dbDefault = "data/asesor.db"
+var (
+	validSources = map[string]struct{}{
+		"yahoo":     {},
+		"dolarapi":  {},
+		"data912":   {},
+		"coingecko": {},
+	}
+
+	validKinds = map[string]struct{}{
+		"value": {},
+		"pct":   {},
+	}
+
+	validDirections = map[string]struct{}{
+		"above": {},
+		"below": {},
+	}
+)
+
+const (
+	watchlistPath = "watchlist.yaml"
+	dbDefault     = "data/asesor.db"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -27,6 +52,8 @@ func main() {
 	switch subcommand {
 	case "run":
 		err = runAlerts(args)
+	case "add":
+		err = runAdd(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", subcommand)
 		os.Exit(1)
@@ -83,6 +110,106 @@ func runAlerts(args []string) error {
 	}
 
 	return nil
+}
+
+func runAdd(args []string) error {
+	fs := flag.NewFlagSet("add", flag.ExitOnError)
+	dbFlag := fs.String("db", dbDefault, "path to SQLite database")
+	watchlistFlag := fs.String("watchlist", watchlistPath, "path to watchlist YAML file")
+	sourceFlag := fs.String("source", "", "quote source (yahoo, dolarapi, data912, coingecko)")
+	symbolFlag := fs.String("symbol", "", "asset symbol")
+	kindFlag := fs.String("kind", "", "rule kind (value, pct)")
+	directionFlag := fs.String("direction", "", "rule direction (above, below)")
+	thresholdFlag := fs.Float64("threshold", 0, "threshold value")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *sourceFlag == "" || *symbolFlag == "" || *kindFlag == "" || *directionFlag == "" || *thresholdFlag == 0 {
+		return errors.New("missing required flag: -source, -symbol, -kind, -direction, -threshold")
+	}
+
+	wl, err := config.Load(*watchlistFlag)
+	if err != nil {
+		return fmt.Errorf("load watchlist: %w", err)
+	}
+
+	if err := validateAdd(*sourceFlag, *symbolFlag, *kindFlag, *directionFlag, *thresholdFlag, wl); err != nil {
+		return err
+	}
+
+	st, err := store.Open(*dbFlag)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	quote, ok, err := st.LatestQuote(*sourceFlag, *symbolFlag)
+	if err != nil {
+		return fmt.Errorf("latest quote: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("no stored quote for %s/%s; fetch quotes before adding a rule", *sourceFlag, *symbolFlag)
+	}
+
+	id, err := st.CreateRule(*sourceFlag, *symbolFlag, *kindFlag, *directionFlag, *thresholdFlag, quote.Price, quote.FetchedAt)
+	if err != nil {
+		return fmt.Errorf("create rule: %w", err)
+	}
+
+	fmt.Printf("Rule %d created for %s/%s (%s %s %.4f)\n", id, *sourceFlag, *symbolFlag, *kindFlag, *directionFlag, *thresholdFlag)
+	fmt.Printf("Captured baseline price=%.4f from quote fetched at %s\n", quote.Price, quote.FetchedAt.Format(time.RFC3339))
+	return nil
+}
+
+func validateAdd(source, symbol, kind, direction string, threshold float64, wl *config.Watchlist) error {
+	if _, ok := validSources[source]; !ok {
+		return fmt.Errorf("invalid source %q: must be one of yahoo, dolarapi, data912, coingecko", source)
+	}
+	if _, ok := validKinds[kind]; !ok {
+		return fmt.Errorf("invalid kind %q: must be value or pct", kind)
+	}
+	if _, ok := validDirections[direction]; !ok {
+		return fmt.Errorf("invalid direction %q: must be above or below", direction)
+	}
+	if threshold <= 0 {
+		return errors.New("threshold must be positive")
+	}
+	if !isWatchlisted(source, symbol, wl) {
+		return fmt.Errorf("%s/%s is not in watchlist.yaml", source, symbol)
+	}
+	return nil
+}
+
+func isWatchlisted(source, symbol string, wl *config.Watchlist) bool {
+	symbol = strings.TrimSpace(symbol)
+	switch source {
+	case "yahoo":
+		for _, a := range wl.USA {
+			if strings.EqualFold(strings.TrimSpace(a.Symbol), symbol) {
+				return true
+			}
+		}
+	case "dolarapi":
+		for _, d := range wl.Dolares {
+			if strings.EqualFold(strings.TrimSpace(d), symbol) {
+				return true
+			}
+		}
+	case "data912":
+		for _, b := range wl.Bonos {
+			if strings.EqualFold(strings.TrimSpace(b), symbol) {
+				return true
+			}
+		}
+	case "coingecko":
+		for _, c := range wl.Cripto {
+			if strings.EqualFold(strings.TrimSpace(c.ID), symbol) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func toAlertRules(rules []store.Rule) []alert.Rule {

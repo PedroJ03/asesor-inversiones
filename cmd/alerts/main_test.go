@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +28,28 @@ func seedQuotes(t *testing.T, s *store.Store, quotes []fetch.Quote) {
 	if err := s.SaveQuotes(quotes); err != nil {
 		t.Fatalf("seed quotes: %v", err)
 	}
+}
+
+func writeWatchlist(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "watchlist.yaml")
+	data := `usa:
+  - symbol: SPY
+  - symbol: QQQ
+dolares:
+  - oficial
+  - blue
+bonos:
+  - AL30D
+  - GD30D
+cripto:
+  - id: bitcoin
+  - id: ethereum
+`
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatalf("write watchlist: %v", err)
+	}
+	return path
 }
 
 func TestRunTriggersAndWarnings(t *testing.T) {
@@ -81,5 +105,137 @@ func TestRunStoreFailureExitsNonZero(t *testing.T) {
 	t.Parallel()
 	if err := runAlerts([]string{"-db", "/nonexistent/path/to/db/asesor.db", "-max-age", "24h"}); err == nil {
 		t.Fatal("expected error for invalid db path")
+	}
+}
+
+func TestAddValidCapturesBaseline(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 600.5, FetchedAt: now},
+	})
+
+	if err := runAdd([]string{
+		"-db", dbPath,
+		"-watchlist", wl,
+		"-source", "yahoo",
+		"-symbol", "SPY",
+		"-kind", "value",
+		"-direction", "above",
+		"-threshold", "590",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 rule, got %d", len(rules))
+	}
+	if rules[0].BaselinePrice != 600.5 {
+		t.Errorf("baseline: want 600.5, got %v", rules[0].BaselinePrice)
+	}
+}
+
+func TestAddRejectsMissingQuote(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+
+	err := runAdd([]string{
+		"-db", dbPath,
+		"-watchlist", wl,
+		"-source", "yahoo",
+		"-symbol", "SPY",
+		"-kind", "value",
+		"-direction", "above",
+		"-threshold", "590",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing quote")
+	}
+	if !strings.Contains(err.Error(), "no stored quote") {
+		t.Errorf("want missing quote error, got %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("want 0 rules, got %d", len(rules))
+	}
+}
+
+func TestAddRejectsWatchlist(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "TSLA", Price: 300, FetchedAt: now},
+	})
+
+	err := runAdd([]string{
+		"-db", dbPath,
+		"-watchlist", wl,
+		"-source", "yahoo",
+		"-symbol", "TSLA",
+		"-kind", "value",
+		"-direction", "above",
+		"-threshold", "290",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-watchlisted symbol")
+	}
+	if !strings.Contains(err.Error(), "not in watchlist") {
+		t.Errorf("want watchlist error, got %v", err)
+	}
+}
+
+func TestAddInvalidFlags(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 600, FetchedAt: now},
+	})
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "invalid source",
+			args: []string{"-db", dbPath, "-watchlist", wl, "-source", "binance", "-symbol", "SPY", "-kind", "value", "-direction", "above", "-threshold", "590"},
+		},
+		{
+			name: "invalid kind",
+			args: []string{"-db", dbPath, "-watchlist", wl, "-source", "yahoo", "-symbol", "SPY", "-kind", "delta", "-direction", "above", "-threshold", "590"},
+		},
+		{
+			name: "invalid direction",
+			args: []string{"-db", dbPath, "-watchlist", wl, "-source", "yahoo", "-symbol", "SPY", "-kind", "value", "-direction", "up", "-threshold", "590"},
+		},
+		{
+			name: "zero threshold",
+			args: []string{"-db", dbPath, "-watchlist", wl, "-source", "yahoo", "-symbol", "SPY", "-kind", "value", "-direction", "above", "-threshold", "0"},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := runAdd(tt.args); err == nil {
+				t.Fatal("expected error")
+			}
+		})
 	}
 }
