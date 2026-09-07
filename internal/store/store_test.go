@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -235,5 +236,155 @@ func TestListRulesEnabledFilter(t *testing.T) {
 	}
 	if enabled[0].Source != "yahoo" {
 		t.Errorf("want yahoo rule, got %s", enabled[0].Source)
+	}
+}
+
+func TestRemoveRulePreservesHistory(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	alertID, err := s.InsertAlert(Alert{
+		RuleID:        sql.NullInt64{Int64: ruleID, Valid: true},
+		Source:        "yahoo",
+		Symbol:        "SPY",
+		Kind:          "value",
+		Threshold:     600,
+		ObservedPrice: sql.NullFloat64{Float64: 605, Valid: true},
+		BaselinePrice: sql.NullFloat64{Float64: 595, Valid: true},
+		TriggeredAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("insert alert: %v", err)
+	}
+
+	if err := s.RemoveRule(ruleID); err != nil {
+		t.Fatalf("remove rule: %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want 0 rules, got %d", len(rules))
+	}
+
+	history, err := s.History(10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("want 1 history entry, got %d", len(history))
+	}
+	if history[0].ID != alertID {
+		t.Errorf("want alert id %d, got %d", alertID, history[0].ID)
+	}
+	if history[0].RuleID.Valid {
+		t.Errorf("want null rule_id after removal, got %d", history[0].RuleID.Int64)
+	}
+}
+
+func TestLatestQuoteOrdering(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	older := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	quotes := []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 590, FetchedAt: older},
+		{Source: "yahoo", Symbol: "SPY", Price: 600, FetchedAt: newer},
+	}
+	if err := s.SaveQuotes(quotes); err != nil {
+		t.Fatalf("save quotes: %v", err)
+	}
+
+	got, ok, err := s.LatestQuote("yahoo", "SPY")
+	if err != nil {
+		t.Fatalf("latest quote: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected a latest quote")
+	}
+	if got.Price != 600 {
+		t.Errorf("want newest price 600, got %v", got.Price)
+	}
+	if !got.FetchedAt.Equal(newer) {
+		t.Errorf("want newest fetched_at, got %v", got.FetchedAt)
+	}
+
+	_, ok, err = s.LatestQuote("yahoo", "UNKNOWN")
+	if err != nil {
+		t.Fatalf("latest unknown: %v", err)
+	}
+	if ok {
+		t.Errorf("want no quote for unknown symbol")
+	}
+}
+
+func TestUpdateRuleState(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	if err := s.UpdateRuleState(ruleID, "triggered"); err != nil {
+		t.Fatalf("update state: %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if rules[0].State != "triggered" {
+		t.Errorf("want triggered, got %s", rules[0].State)
+	}
+
+	if err := s.UpdateRuleState(ruleID, "invalid"); !errors.Is(err, ErrInvalidRule) {
+		t.Fatalf("want ErrInvalidRule, got %v", err)
+	}
+}
+
+func TestHistoryLimit(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 3; i++ {
+		if _, err := s.InsertAlert(Alert{
+			Source:        "yahoo",
+			Symbol:        "SPY",
+			Kind:          "value",
+			Threshold:     600,
+			ObservedPrice: sql.NullFloat64{Float64: float64(600 + i), Valid: true},
+			TriggeredAt:   now.Add(time.Duration(i) * time.Hour),
+		}); err != nil {
+			t.Fatalf("insert alert %d: %v", i, err)
+		}
+	}
+
+	history, err := s.History(2)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("want 2 history entries, got %d", len(history))
+	}
+	if !history[0].TriggeredAt.Equal(now.Add(2 * time.Hour)) {
+		t.Errorf("want newest entry first, got %v", history[0].TriggeredAt)
+	}
+
+	_, err = s.History(0)
+	if !errors.Is(err, ErrInvalidRule) {
+		t.Fatalf("want ErrInvalidRule for zero limit, got %v", err)
 	}
 }

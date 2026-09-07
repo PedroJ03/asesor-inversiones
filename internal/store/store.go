@@ -288,6 +288,106 @@ func (s *Store) CreateRule(source, symbol, kind, direction string, threshold, ba
 	return id, nil
 }
 
+// RemoveRule deletes a rule by id, preserving its alert history via ON DELETE SET NULL.
+func (s *Store) RemoveRule(id int64) error {
+	res, err := s.db.Exec("DELETE FROM alert_rules WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("remove rule: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("rule %d not found", id)
+	}
+	return nil
+}
+
+// LatestQuote returns the newest stored quote for a source and symbol.
+func (s *Store) LatestQuote(source, symbol string) (QuoteRecord, bool, error) {
+	var r QuoteRecord
+	var quotedAt sql.NullTime
+	err := s.db.QueryRow(`
+		SELECT source, symbol, name, price, prev_close, change_pct, currency, bid, ask, quoted_at, fetched_at
+		FROM quotes
+		WHERE source = ? AND symbol = ?
+		ORDER BY fetched_at DESC, id DESC
+		LIMIT 1
+	`, source, symbol).Scan(
+		&r.Source, &r.Symbol, &r.Name, &r.Price, &r.PrevClose, &r.ChangePct,
+		&r.Currency, &r.Bid, &r.Ask, &quotedAt, &r.FetchedAt,
+	)
+	if err == sql.ErrNoRows {
+		return r, false, nil
+	}
+	if err != nil {
+		return r, false, fmt.Errorf("query latest quote: %w", err)
+	}
+	r.QuotedAt = quotedAt.Time
+	return r, true, nil
+}
+
+// UpdateRuleState sets the state of a rule.
+func (s *Store) UpdateRuleState(id int64, state string) error {
+	if state != "armed" && state != "triggered" {
+		return fmt.Errorf("%w: invalid state %q", ErrInvalidRule, state)
+	}
+	_, err := s.db.Exec("UPDATE alert_rules SET state = ? WHERE id = ?", state, id)
+	if err != nil {
+		return fmt.Errorf("update rule state: %w", err)
+	}
+	return nil
+}
+
+// InsertAlert records a triggered alert snapshot.
+func (s *Store) InsertAlert(a Alert) (int64, error) {
+	res, err := s.db.Exec(`
+		INSERT INTO alerts
+		(rule_id, source, symbol, kind, threshold, observed_price, observed_change_pct, baseline_price, quote_fetched_at, triggered_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, a.RuleID, a.Source, a.Symbol, a.Kind, a.Threshold, a.ObservedPrice, a.ObservedChangePct, a.BaselinePrice, a.QuoteFetchedAt, a.TriggeredAt.UTC())
+	if err != nil {
+		return 0, fmt.Errorf("insert alert: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("last insert id: %w", err)
+	}
+	return id, nil
+}
+
+// History returns the most recent alert snapshots, bounded by limit.
+func (s *Store) History(limit int) ([]Alert, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("%w: limit must be positive", ErrInvalidRule)
+	}
+	rows, err := s.db.Query(`
+		SELECT id, rule_id, source, symbol, kind, threshold, observed_price, observed_change_pct, baseline_price, quote_fetched_at, triggered_at
+		FROM alerts
+		ORDER BY triggered_at DESC, id DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query history: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Alert
+	for rows.Next() {
+		var a Alert
+		err := rows.Scan(
+			&a.ID, &a.RuleID, &a.Source, &a.Symbol, &a.Kind, &a.Threshold,
+			&a.ObservedPrice, &a.ObservedChangePct, &a.BaselinePrice, &a.QuoteFetchedAt, &a.TriggeredAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan alert: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // ListRules returns persisted rules, optionally filtering to enabled rules only.
 func (s *Store) ListRules(enabledOnly bool) ([]Rule, error) {
 	query := `
