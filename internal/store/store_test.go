@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,5 +120,120 @@ func TestSaveQuotesEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("want 0 quotes, got %d", len(got))
+	}
+}
+
+func TestCreateAndListRules(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	id, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
+	if err != nil {
+		t.Fatalf("create valid rule: %v", err)
+	}
+	if id <= 0 {
+		t.Fatalf("want positive id, got %d", id)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 rule, got %d", len(rules))
+	}
+	r := rules[0]
+	if r.Source != "yahoo" || r.Symbol != "SPY" || r.Kind != "value" || r.Direction != "above" {
+		t.Errorf("unexpected rule identity: %+v", r)
+	}
+	if r.Threshold != 600 || r.BaselinePrice != 595 {
+		t.Errorf("unexpected threshold/baseline: %+v", r)
+	}
+	if !r.Enabled || r.State != "armed" {
+		t.Errorf("want enabled and armed, got enabled=%v state=%s", r.Enabled, r.State)
+	}
+}
+
+func TestCreateRuleValidation(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name    string
+		source  string
+		symbol  string
+		kind    string
+		direction string
+		threshold float64
+		baseline float64
+	}{
+		{"invalid source", "unknown", "SPY", "value", "above", 600, 595},
+		{"invalid kind", "yahoo", "SPY", "delta", "above", 600, 595},
+		{"invalid direction", "yahoo", "SPY", "value", "up", 600, 595},
+		{"zero threshold", "yahoo", "SPY", "value", "above", 0, 595},
+		{"negative threshold", "yahoo", "SPY", "value", "above", -5, 595},
+		{"zero baseline", "yahoo", "SPY", "value", "above", 600, 0},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.CreateRule(tt.source, tt.symbol, tt.kind, tt.direction, tt.threshold, tt.baseline, now)
+			if !errors.Is(err, ErrInvalidRule) {
+				t.Fatalf("want ErrInvalidRule, got %v", err)
+			}
+		})
+	}
+}
+
+func TestCreateRuleDuplicate(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	if _, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 590, now)
+	if !errors.Is(err, ErrDuplicateRule) {
+		t.Fatalf("want ErrDuplicateRule, got %v", err)
+	}
+}
+
+func TestListRulesEnabledFilter(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	if _, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now); err != nil {
+		t.Fatalf("create enabled rule: %v", err)
+	}
+
+	// Insert a disabled rule directly to test the filter without depending on future update methods.
+	if _, err := s.db.Exec(`
+		INSERT INTO alert_rules (source, symbol, kind, direction, threshold, baseline_price, enabled, state, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "dolarapi", "blue", "value", "below", 1500, 1600, 0, "armed", now.UTC()); err != nil {
+		t.Fatalf("insert disabled rule: %v", err)
+	}
+
+	all, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("want 2 rules, got %d", len(all))
+	}
+
+	enabled, err := s.ListRules(true)
+	if err != nil {
+		t.Fatalf("list enabled: %v", err)
+	}
+	if len(enabled) != 1 {
+		t.Fatalf("want 1 enabled rule, got %d", len(enabled))
+	}
+	if enabled[0].Source != "yahoo" {
+		t.Errorf("want yahoo rule, got %s", enabled[0].Source)
 	}
 }

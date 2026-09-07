@@ -3,6 +3,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,6 +72,33 @@ func (s *Store) migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_quotes_source_fetched ON quotes(source, fetched_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_quotes_symbol ON quotes(symbol)`,
+		`CREATE TABLE IF NOT EXISTS alert_rules (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			source TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			kind TEXT CHECK(kind IN ('value','pct')) NOT NULL,
+			direction TEXT CHECK(direction IN ('above','below')) NOT NULL,
+			threshold REAL NOT NULL,
+			baseline_price REAL NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			state TEXT CHECK(state IN ('armed','triggered')) NOT NULL DEFAULT 'armed',
+			created_at DATETIME NOT NULL,
+			UNIQUE(source,symbol,kind,direction,threshold)
+		)`,
+		`CREATE TABLE IF NOT EXISTS alerts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+			source TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			threshold REAL NOT NULL,
+			observed_price REAL,
+			observed_change_pct REAL,
+			baseline_price REAL,
+			quote_fetched_at DATETIME,
+			triggered_at DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_alerts_triggered_at ON alerts(triggered_at DESC)`,
 	}
 
 	for _, stmt := range stmts {
@@ -165,6 +193,130 @@ func (s *Store) QuotesBySource(source string) ([]QuoteRecord, error) {
 			return nil, fmt.Errorf("scan quote: %w", err)
 		}
 		r.QuotedAt = quotedAt.Time
+		out = append(out, r)
+	}
+
+	return out, rows.Err()
+}
+
+// Rule mirrors an alert_rules row.
+type Rule struct {
+	ID            int64
+	Source        string
+	Symbol        string
+	Kind          string
+	Direction     string
+	Threshold     float64
+	BaselinePrice float64
+	Enabled       bool
+	State         string
+	CreatedAt     time.Time
+}
+
+// Alert mirrors an alerts row.
+type Alert struct {
+	ID               int64
+	RuleID           sql.NullInt64
+	Source           string
+	Symbol           string
+	Kind             string
+	Threshold        float64
+	ObservedPrice    sql.NullFloat64
+	ObservedChangePct sql.NullFloat64
+	BaselinePrice    sql.NullFloat64
+	QuoteFetchedAt   sql.NullTime
+	TriggeredAt      time.Time
+}
+
+var (
+	// ErrInvalidRule indicates a rule failed validation.
+	ErrInvalidRule = errors.New("invalid rule")
+	// ErrDuplicateRule indicates a rule with the same identity already exists.
+	ErrDuplicateRule = errors.New("duplicate rule")
+)
+
+var validSources = map[string]struct{}{
+	"yahoo":    {},
+	"dolarapi": {},
+	"data912":  {},
+	"coingecko": {},
+}
+
+// CreateRule inserts a validated alert rule and returns its generated id.
+func (s *Store) CreateRule(source, symbol, kind, direction string, threshold, baselinePrice float64, createdAt time.Time) (int64, error) {
+	if _, ok := validSources[source]; !ok {
+		return 0, fmt.Errorf("%w: invalid source %q", ErrInvalidRule, source)
+	}
+	if kind != "value" && kind != "pct" {
+		return 0, fmt.Errorf("%w: invalid kind %q", ErrInvalidRule, kind)
+	}
+	if direction != "above" && direction != "below" {
+		return 0, fmt.Errorf("%w: invalid direction %q", ErrInvalidRule, direction)
+	}
+	if threshold <= 0 {
+		return 0, fmt.Errorf("%w: threshold must be positive", ErrInvalidRule)
+	}
+	if baselinePrice <= 0 {
+		return 0, fmt.Errorf("%w: baseline price must be positive", ErrInvalidRule)
+	}
+
+	var exists int
+	err := s.db.QueryRow(`
+		SELECT 1 FROM alert_rules
+		WHERE source = ? AND symbol = ? AND kind = ? AND direction = ? AND threshold = ?
+	`, source, symbol, kind, direction, threshold).Scan(&exists)
+	if err == nil {
+		return 0, ErrDuplicateRule
+	}
+	if err != sql.ErrNoRows {
+		return 0, fmt.Errorf("check duplicate: %w", err)
+	}
+
+	res, err := s.db.Exec(`
+		INSERT INTO alert_rules
+		(source, symbol, kind, direction, threshold, baseline_price, enabled, state, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, source, symbol, kind, direction, threshold, baselinePrice, 1, "armed", createdAt.UTC())
+	if err != nil {
+		return 0, fmt.Errorf("insert rule: %w", err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("last insert id: %w", err)
+	}
+	return id, nil
+}
+
+// ListRules returns persisted rules, optionally filtering to enabled rules only.
+func (s *Store) ListRules(enabledOnly bool) ([]Rule, error) {
+	query := `
+		SELECT id, source, symbol, kind, direction, threshold, baseline_price, enabled, state, created_at
+		FROM alert_rules
+	`
+	if enabledOnly {
+		query += "WHERE enabled = 1 "
+	}
+	query += "ORDER BY created_at DESC"
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query rules: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Rule
+	for rows.Next() {
+		var r Rule
+		var enabled int
+		err := rows.Scan(
+			&r.ID, &r.Source, &r.Symbol, &r.Kind, &r.Direction, &r.Threshold,
+			&r.BaselinePrice, &enabled, &r.State, &r.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan rule: %w", err)
+		}
+		r.Enabled = enabled == 1
 		out = append(out, r)
 	}
 
