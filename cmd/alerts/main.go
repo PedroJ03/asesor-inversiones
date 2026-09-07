@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,12 @@ func main() {
 		err = runAlerts(args)
 	case "add":
 		err = runAdd(args)
+	case "list":
+		err = runList(args)
+	case "remove":
+		err = runRemove(args)
+	case "history":
+		err = runHistory(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", subcommand)
 		os.Exit(1)
@@ -159,6 +166,116 @@ func runAdd(args []string) error {
 
 	fmt.Printf("Rule %d created for %s/%s (%s %s %.4f)\n", id, *sourceFlag, *symbolFlag, *kindFlag, *directionFlag, *thresholdFlag)
 	fmt.Printf("Captured baseline price=%.4f from quote fetched at %s\n", quote.Price, quote.FetchedAt.Format(time.RFC3339))
+	return nil
+}
+
+func runList(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	dbFlag := fs.String("db", dbDefault, "path to SQLite database")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	st, err := store.Open(*dbFlag)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	rules, err := st.ListRules(false)
+	if err != nil {
+		return fmt.Errorf("list rules: %w", err)
+	}
+
+	if len(rules) == 0 {
+		fmt.Println("No rules.")
+		return nil
+	}
+
+	fmt.Printf("%-4s %-10s %-10s %-6s %-10s %-10s %-10s %-10s %-8s\n", "ID", "SOURCE", "SYMBOL", "KIND", "DIRECTION", "THRESHOLD", "BASELINE", "STATE", "ENABLED")
+	for _, r := range rules {
+		enabled := "no"
+		if r.Enabled {
+			enabled = "yes"
+		}
+		fmt.Printf("%-4d %-10s %-10s %-6s %-10s %-10.4f %-10.4f %-10s %-8s\n",
+			r.ID, r.Source, r.Symbol, r.Kind, r.Direction, r.Threshold, r.BaselinePrice, r.State, enabled)
+	}
+	return nil
+}
+
+func runRemove(args []string) error {
+	fs := flag.NewFlagSet("remove", flag.ExitOnError)
+	dbFlag := fs.String("db", dbDefault, "path to SQLite database")
+	idFlag := fs.Int64("id", 0, "rule id to remove")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *idFlag <= 0 {
+		return errors.New("invalid rule id")
+	}
+
+	st, err := store.Open(*dbFlag)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	if err := st.RemoveRule(*idFlag); err != nil {
+		return fmt.Errorf("remove rule: %w", err)
+	}
+	fmt.Printf("Rule %d removed.\n", *idFlag)
+	return nil
+}
+
+func runHistory(args []string) error {
+	fs := flag.NewFlagSet("history", flag.ExitOnError)
+	dbFlag := fs.String("db", dbDefault, "path to SQLite database")
+	limitFlag := fs.Int("limit", 10, "maximum history entries")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *limitFlag <= 0 {
+		return errors.New("invalid limit")
+	}
+
+	st, err := store.Open(*dbFlag)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	entries, err := st.History(*limitFlag)
+	if err != nil {
+		return fmt.Errorf("history: %w", err)
+	}
+
+	if len(entries) == 0 {
+		fmt.Println("No history.")
+		return nil
+	}
+
+	fmt.Printf("%-4s %-10s %-10s %-6s %-10s %-12s %-12s %-12s %-20s\n",
+		"ID", "SOURCE", "SYMBOL", "KIND", "THRESHOLD", "PRICE", "CHANGE_PCT", "BASELINE", "TRIGGERED_AT")
+	for _, e := range entries {
+		price := "-"
+		if e.ObservedPrice.Valid {
+			price = strconv.FormatFloat(e.ObservedPrice.Float64, 'f', 4, 64)
+		}
+		changePct := "-"
+		if e.ObservedChangePct.Valid {
+			changePct = strconv.FormatFloat(e.ObservedChangePct.Float64, 'f', 4, 64)
+		}
+		baseline := "-"
+		if e.BaselinePrice.Valid {
+			baseline = strconv.FormatFloat(e.BaselinePrice.Float64, 'f', 4, 64)
+		}
+		fmt.Printf("%-4d %-10s %-10s %-6s %-10.4f %-12s %-12s %-12s %-20s\n",
+			e.ID, e.Source, e.Symbol, e.Kind, e.Threshold, price, changePct, baseline,
+			e.TriggeredAt.Format(time.RFC3339))
+	}
 	return nil
 }
 

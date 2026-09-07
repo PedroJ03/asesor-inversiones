@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -237,5 +238,153 @@ func TestAddInvalidFlags(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	stdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+
+	done := make(chan string, 1)
+	go func() {
+		var buf strings.Builder
+		b := make([]byte, 1024)
+		for {
+			n, err := r.Read(b)
+			if n > 0 {
+				buf.Write(b[:n])
+			}
+			if err != nil {
+				break
+			}
+		}
+		done <- buf.String()
+	}()
+
+	fn()
+
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	os.Stdout = stdout
+	return out
+}
+
+func TestListDisplaysState(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	if _, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := runList([]string{"-db", dbPath}); err != nil {
+			t.Fatalf("list: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "SPY") {
+		t.Errorf("output should contain SPY, got %q", out)
+	}
+	if !strings.Contains(out, "armed") {
+		t.Errorf("output should contain state, got %q", out)
+	}
+}
+
+func TestRemovePreservesHistory(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 605, FetchedAt: now},
+	})
+
+	if err := runAlerts([]string{"-db", dbPath, "-max-age", "24h"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if err := runRemove([]string{"-db", dbPath, "-id", "0"}); err == nil {
+		t.Fatal("expected error for invalid id")
+	}
+
+	if err := runRemove([]string{"-db", dbPath, "-id", "999"}); err == nil {
+		t.Fatal("expected error for missing rule")
+	}
+
+	if err := runRemove([]string{"-db", dbPath, "-id", strconv.FormatInt(ruleID, 10)}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("want 0 rules, got %d", len(rules))
+	}
+
+	history, err := s.History(10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("want 1 history entry, got %d", len(history))
+	}
+	if history[0].RuleID.Valid {
+		t.Errorf("rule_id should be null after removal")
+	}
+}
+
+func TestHistoryOutput(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 605, FetchedAt: now},
+	})
+
+	if err := runAlerts([]string{"-db", dbPath, "-max-age", "24h"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if err := runHistory([]string{"-db", dbPath, "-limit", "0"}); err == nil {
+		t.Fatal("expected error for invalid limit")
+	}
+
+	out := captureStdout(t, func() {
+		if err := runHistory([]string{"-db", dbPath, "-limit", "10"}); err != nil {
+			t.Fatalf("history: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "SPY") {
+		t.Errorf("output should contain SPY, got %q", out)
+	}
+
+	history, err := s.History(10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 || history[0].RuleID.Int64 != ruleID {
+		t.Errorf("history should reference rule %d", ruleID)
 	}
 }
