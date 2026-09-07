@@ -162,13 +162,13 @@ func TestCreateRuleValidation(t *testing.T) {
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 
 	cases := []struct {
-		name    string
-		source  string
-		symbol  string
-		kind    string
+		name      string
+		source    string
+		symbol    string
+		kind      string
 		direction string
 		threshold float64
-		baseline float64
+		baseline  float64
 	}{
 		{"invalid source", "unknown", "SPY", "value", "above", 600, 595},
 		{"invalid kind", "yahoo", "SPY", "delta", "above", 600, 595},

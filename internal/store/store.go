@@ -215,17 +215,17 @@ type Rule struct {
 
 // Alert mirrors an alerts row.
 type Alert struct {
-	ID               int64
-	RuleID           sql.NullInt64
-	Source           string
-	Symbol           string
-	Kind             string
-	Threshold        float64
-	ObservedPrice    sql.NullFloat64
+	ID                int64
+	RuleID            sql.NullInt64
+	Source            string
+	Symbol            string
+	Kind              string
+	Threshold         float64
+	ObservedPrice     sql.NullFloat64
 	ObservedChangePct sql.NullFloat64
-	BaselinePrice    sql.NullFloat64
-	QuoteFetchedAt   sql.NullTime
-	TriggeredAt      time.Time
+	BaselinePrice     sql.NullFloat64
+	QuoteFetchedAt    sql.NullTime
+	TriggeredAt       time.Time
 }
 
 var (
@@ -236,9 +236,9 @@ var (
 )
 
 var validSources = map[string]struct{}{
-	"yahoo":    {},
-	"dolarapi": {},
-	"data912":  {},
+	"yahoo":     {},
+	"dolarapi":  {},
+	"data912":   {},
 	"coingecko": {},
 }
 

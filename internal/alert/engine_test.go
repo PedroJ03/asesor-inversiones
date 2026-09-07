@@ -171,8 +171,8 @@ func TestEvaluateGuards(t *testing.T) {
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 
 	cases := []struct {
-		name    string
-		resolve func(string, string) (Quote, bool, error)
+		name     string
+		resolve  func(string, string) (Quote, bool, error)
 		wantWarn string
 	}{
 		{
@@ -183,13 +183,13 @@ func TestEvaluateGuards(t *testing.T) {
 			wantWarn: "no quote available",
 		},
 		{
-			name: "stale quote",
-			resolve: fixedResolver(map[string]Quote{"yahoo/SPY": {Price: 605, FetchedAt: now.Add(-25 * time.Hour)}}),
+			name:     "stale quote",
+			resolve:  fixedResolver(map[string]Quote{"yahoo/SPY": {Price: 605, FetchedAt: now.Add(-25 * time.Hour)}}),
 			wantWarn: "quote stale",
 		},
 		{
-			name: "resolve error",
-			resolve: errorResolver(errors.New("boom")),
+			name:     "resolve error",
+			resolve:  errorResolver(errors.New("boom")),
 			wantWarn: "resolve error",
 		},
 	}

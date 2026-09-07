@@ -26,16 +26,16 @@ type Quote struct {
 
 // Alert represents a triggered alert snapshot.
 type Alert struct {
-	RuleID          int64
-	Source          string
-	Symbol          string
-	Kind            string
-	Threshold       float64
-	ObservedPrice   float64
+	RuleID            int64
+	Source            string
+	Symbol            string
+	Kind              string
+	Threshold         float64
+	ObservedPrice     float64
 	ObservedChangePct float64
-	BaselinePrice   float64
-	QuoteFetchedAt  time.Time
-	TriggeredAt     time.Time
+	BaselinePrice     float64
+	QuoteFetchedAt    time.Time
+	TriggeredAt       time.Time
 }
 
 // StateChange records a rule transition.
