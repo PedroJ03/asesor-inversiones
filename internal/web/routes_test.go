@@ -215,3 +215,50 @@ func TestNewMux_AuthenticatedDatedReportInvalidDate(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
+
+func TestNewMux_RouteMethodMatrix(t *testing.T) {
+	deps := testDeps(t)
+	mux := NewMux(deps)
+
+	cases := []struct {
+		method string
+		path   string
+		want   int
+	}{
+		{"GET", "/healthz", http.StatusOK},
+		{"GET", "/login", http.StatusOK},
+		{"POST", "/login", http.StatusUnauthorized},
+		{"GET", "/assets/main.css", http.StatusOK},
+		{"GET", "/manifest.webmanifest", http.StatusOK},
+		{"GET", "/sw.js", http.StatusOK},
+		{"GET", "/", http.StatusSeeOther},
+		{"GET", "/reporte", http.StatusSeeOther},
+		{"GET", "/reporte/", http.StatusSeeOther},
+		{"GET", "/reporte/2024-01-01", http.StatusSeeOther},
+		{"GET", "/activos", http.StatusSeeOther},
+		{"GET", "/activos/", http.StatusSeeOther},
+		{"GET", "/activos/yahoo/AAPL", http.StatusSeeOther},
+		{"GET", "/alertas", http.StatusSeeOther},
+		{"GET", "/alertas/", http.StatusSeeOther},
+		{"POST", "/alertas/reglas/", http.StatusSeeOther},
+		{"PUT", "/alertas/reglas/1", http.StatusSeeOther},
+		{"DELETE", "/alertas/reglas/1", http.StatusSeeOther},
+		{"POST", "/alertas/reglas/1", http.StatusSeeOther},
+		{"POST", "/healthz", http.StatusMethodNotAllowed},
+		{"PUT", "/login", http.StatusMethodNotAllowed},
+		{"DELETE", "/reporte", http.StatusMethodNotAllowed},
+		{"GET", "/does-not-exist", http.StatusNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			mux.Handler().ServeHTTP(w, req)
+
+			if w.Code != tc.want {
+				t.Fatalf("expected status %d, got %d (body: %q)", tc.want, w.Code, w.Body.String())
+			}
+		})
+	}
+}
