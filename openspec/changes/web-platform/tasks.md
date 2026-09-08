@@ -42,27 +42,27 @@ Chain strategy: pending
 
 ## Phase 3: Reading Views
 
-- [ ] 3.1 Create `internal/web/format.go`: duplicate price/percent helpers + tests; never edit internal/render.
-- [ ] 3.2 Create `internal/web/freshness.go`: 24h threshold, current/stale/missing/unavailable states + tests.
-- [ ] 3.3 Dashboard `GET /` and `/reporte[/{date}]`: invalid date 400, unavailable 404, alert badge; tests.
-- [ ] 3.4 Watchlist `/activos` via `LatestSnapshots`; asset detail via `LatestQuote` + `QuoteHistory`; fragment/missing tests.
-- [ ] 3.5 Mobile CSS: ≤720px single column, bottom tabs (Inicio/Reporte/Activos/Alertas), cards <480px; `última actualización` prominent.
+- [x] 3.1 Create `internal/web/format.go`: duplicate price/percent helpers + tests; never edit internal/render.
+- [x] 3.2 Create `internal/web/freshness.go`: 24h threshold, current/stale/missing/unavailable states + tests.
+- [x] 3.3 Dashboard `GET /` and `/reporte[/{date}]`: invalid date 400, unavailable 404, alert badge; tests.
+- [x] 3.4 Watchlist `/activos` via `LatestSnapshots`; asset detail via `LatestQuote` + `QuoteHistory`; fragment/missing tests.
+- [x] 3.5 Mobile CSS: ≤720px single column, bottom tabs (Inicio/Reporte/Activos/Alertas), cards <480px; `última actualización` prominent.
 
 ## Phase 4: Rule Management
 
-- [ ] 4.1 Verify frozen contract; consume directly, no substitutes/seeds.
-- [ ] 4.2 Alerts `/alertas`: `ListRules(false)` + bounded `History`; armed/triggered, pct baseline; tests.
-- [ ] 4.3 Create rule `POST /alertas/reglas/{$}`, PRG; `ErrInvalidRule`/`ErrDuplicateRule` → safe HTML errors; tests.
-- [ ] 4.4 Rule actions: `PUT`/`DELETE /alertas/reglas/{id}`, no-JS `POST` fallback (`action=deshabilitar|eliminar`), PRG; htmx fragments; test verbs, history preserved.
+- [x] 4.1 Verify frozen contract; consume directly, no substitutes/seeds.
+- [x] 4.2 Alerts `/alertas`: `ListRules(false)` + bounded `History`; armed/triggered, pct baseline; tests.
+- [x] 4.3 Create rule `POST /alertas/reglas/{$}`, PRG; `ErrInvalidRule`/`ErrDuplicateRule` → safe HTML errors; tests.
+- [x] 4.4 Rule actions: `PUT`/`DELETE /alertas/reglas/{id}`, no-JS `POST` fallback (`action=deshabilitar|eliminar`), PRG; htmx fragments; test verbs, history preserved.
 
 ## Phase 5: PWA
 
-- [ ] 5.1 Add `manifest.webmanifest` + 192/512 maskable icons, embedded.
-- [ ] 5.2 Add `sw.js`: cache-first versioned shell assets, stale-while-revalidate documents, offline marker preserving timestamps/freshness.
-- [ ] 5.3 htmx SRI/defer; register service worker.
-- [ ] 5.4 Verify <200 KB first load, HTTPS installability (Lighthouse), JS-disabled HTML.
+- [x] 5.1 Add `manifest.webmanifest` + 192/512 maskable icons, embedded.
+- [x] 5.2 Add `sw.js`: cache-first versioned shell assets, stale-while-revalidate documents, offline marker preserving timestamps/freshness.
+- [x] 5.3 htmx SRI/defer; register service worker.
+- [x] 5.4 Verify <200 KB first load, HTTPS installability (Lighthouse), JS-disabled HTML.
 
 ## Phase 6: Docs/Final Gate
 
-- [ ] 6.1 Document run/deploy: env vars, Caddy proxy, tunnel fallback; rollback: stop binary.
-- [ ] 6.2 Final gate: `go test ./...`, `go build ./...`, `go vet ./...`; zero protected store/render/report edits.
+- [x] 6.1 Document run/deploy: env vars, Caddy proxy, tunnel fallback; rollback: stop binary.
+- [x] 6.2 Final gate: `go test ./...`, `go build ./...`, `go vet ./...`; zero protected store/render/report edits.

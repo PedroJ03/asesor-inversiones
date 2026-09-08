@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/PedroJ03/asesor-inversiones/internal/config"
+	"github.com/PedroJ03/asesor-inversiones/internal/store"
 	"github.com/PedroJ03/asesor-inversiones/internal/web"
 )
 
@@ -27,10 +29,23 @@ func run() error {
 		return err
 	}
 
+	s, err := store.Open(cfg.DBPath)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer s.Close()
+
+	wl, err := config.Load(cfg.WatchlistPath)
+	if err != nil {
+		return fmt.Errorf("load watchlist: %w", err)
+	}
+
 	deps := web.Dependencies{
 		Authorizer:  web.NewCookieAuthorizer(cfg.Password, cfg.Secret),
 		Assets:      web.Assets,
 		RenderLogin: renderLogin,
+		Store:       s,
+		Watchlist:   wl,
 	}
 
 	mux := web.NewMux(deps)
@@ -66,14 +81,16 @@ func run() error {
 	return server.Shutdown(shutdownCtx)
 }
 
-type config struct {
-	Addr     string
-	Password string
-	Secret   string
+type serverConfig struct {
+	Addr          string
+	Password      string
+	Secret        string
+	DBPath        string
+	WatchlistPath string
 }
 
-func loadConfig() (config, error) {
-	var cfg config
+func loadConfig() (serverConfig, error) {
+	var cfg serverConfig
 	cfg.Addr = os.Getenv("WEB_ADDR")
 	if cfg.Addr == "" {
 		cfg.Addr = ":8080"
@@ -82,6 +99,14 @@ func loadConfig() (config, error) {
 	cfg.Secret = os.Getenv("WEB_SESSION_SECRET")
 	if cfg.Password == "" || cfg.Secret == "" {
 		return cfg, errors.New("WEB_AUTH_PASSWORD and WEB_SESSION_SECRET must be set")
+	}
+	cfg.DBPath = os.Getenv("WEB_DB_PATH")
+	if cfg.DBPath == "" {
+		cfg.DBPath = "./asesor.db"
+	}
+	cfg.WatchlistPath = os.Getenv("WATCHLIST_PATH")
+	if cfg.WatchlistPath == "" {
+		cfg.WatchlistPath = "./watchlist.yaml"
 	}
 	return cfg, nil
 }

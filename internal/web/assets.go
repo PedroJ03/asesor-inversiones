@@ -16,12 +16,12 @@ var assetsFS embed.FS
 var Assets http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	// Map well-known PWA paths to their asset file names.
 	file := path.Base(r.URL.Path)
-	if r.URL.Path == "/manifest.webmanifest" || r.URL.Path == "/sw.js" {
+	switch r.URL.Path {
+	case "/manifest.webmanifest", "/sw.js", "/offline.html":
 		file = path.Join("assets", file)
-	} else if r.URL.Path == "/assets/main.css" || r.URL.Path == "/assets/htmx.min.js" {
+	case "/assets/main.css", "/assets/htmx.min.js", "/assets/icon-192.png", "/assets/icon-512.png":
 		file = path.Join("assets", path.Base(r.URL.Path))
-	} else {
-		// Only main.css is served for now; anything else is a 404.
+	default:
 		http.NotFound(w, r)
 		return
 	}
@@ -39,7 +39,14 @@ var Assets http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(file)))
+	contentType := mime.TypeByExtension(path.Ext(file))
+	if path.Ext(file) == ".webmanifest" {
+		contentType = "application/manifest+json"
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
 	// Static assets are immutable for the life of the deployment.
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	http.ServeContent(w, r, file, info.ModTime(), f.(io.ReadSeeker))
