@@ -100,13 +100,13 @@ type chartResponse struct {
 }
 
 type chartMeta struct {
-	Currency               string  `json:"currency"`
-	Symbol                 string  `json:"symbol"`
-	RegularMarketTime      int64   `json:"regularMarketTime"`
-	RegularMarketPrice     float64 `json:"regularMarketPrice"`
+	Currency                   string  `json:"currency"`
+	Symbol                     string  `json:"symbol"`
+	RegularMarketTime          int64   `json:"regularMarketTime"`
+	RegularMarketPrice         float64 `json:"regularMarketPrice"`
 	RegularMarketChangePercent float64 `json:"regularMarketChangePercent"`
-	ChartPreviousClose     float64 `json:"chartPreviousClose"`
-	LongName               string  `json:"longName"`
+	ChartPreviousClose         float64 `json:"chartPreviousClose"`
+	LongName                   string  `json:"longName"`
 }
 
 func firstNonEmpty(values ...string) string {
