@@ -127,7 +127,7 @@ func Dashboard(data DashboardData) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<article class=\"dashboard\"><header class=\"dashboard__header\"><h1>Inicio</h1><a href=\"/alertas\" class=\"dashboard__alerts\" aria-label=\"Alertas\"><span class=\"dashboard__alerts-icon\" aria-hidden=\"true\">🔔</span> <span class=\"dashboard__alerts-count\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<article class=\"dashboard\"><header class=\"dashboard__header\"><h1>Inicio</h1><a href=\"/alertas\" class=\"dashboard__alerts\" aria-label=\"Alertas\"><span class=\"dashboard__alerts-label\">Alertas</span> <span class=\"dashboard__alerts-count\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -257,7 +257,7 @@ func Report(data ReportData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if data.Date != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<a href=\"/reporte\" class=\"report__back\">← Reporte actual</a>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<a href=\"/reporte\" class=\"report__back\">Reporte actual</a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -553,7 +553,7 @@ func AssetDetail(data AssetDetailData) templ.Component {
 			templ_7745c5c3_Var28 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<article class=\"asset\"><header class=\"asset__header\"><a href=\"/activos\" class=\"asset__back\">← Activos</a><h1>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<article class=\"asset\"><header class=\"asset__header\"><a href=\"/activos\" class=\"asset__back\">Activos</a><h1>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -7,6 +7,7 @@ templ Alerts(data AlertsData) {
 		<header class="alerts__header">
 			<h1>Alertas</h1>
 		</header>
+		<p class="alerts__hint">Las alertas se evalúan cada vez que se actualiza el reporte (go run ./cmd/report).</p>
 		if data.Error != "" {
 			<p class="alerts__error" role="alert">{ data.Error }</p>
 		}
@@ -47,7 +48,16 @@ templ RuleForm(form RuleFormData) {
 			<div class="rule-form__row rule-form__inline">
 				<div>
 					<label for="rule-kind">Tipo</label>
-					<select id="rule-kind" name="kind" required>
+					<select
+						id="rule-kind"
+						name="kind"
+						required
+						hx-get="/alertas"
+						hx-trigger="change"
+						hx-include="closest form"
+						hx-target=".alerts"
+						hx-swap="outerHTML"
+					>
 						<option value="">Seleccionar…</option>
 						<option value="value" selected?={ form.Kind == "value" }>Valor</option>
 						<option value="pct" selected?={ form.Kind == "pct" }>Porcentaje</option>
@@ -57,9 +67,12 @@ templ RuleForm(form RuleFormData) {
 					<label for="rule-direction">Dirección</label>
 					<select id="rule-direction" name="direction" required>
 						<option value="">Seleccionar…</option>
-						<option value="above" selected?={ form.Direction == "above" }>Mayor a</option>
-						<option value="below" selected?={ form.Direction == "below" }>Menor a</option>
+						<option value="above" selected?={ form.Direction == "above" }>{ directionAboveLabel(form.Kind) }</option>
+						<option value="below" selected?={ form.Direction == "below" }>{ directionBelowLabel(form.Kind) }</option>
 					</select>
+					if form.Kind == "pct" {
+						<p class="rule-form__hint">respecto al precio base capturado al crear la regla</p>
+					}
 				</div>
 				<div>
 					<label for="rule-threshold">Umbral</label>
@@ -92,9 +105,10 @@ templ RulesList(rules []RuleView) {
 							}
 						</div>
 						<div class="rule-card__details">
-							<span>{ rule.Direction } { rule.Threshold }</span>
 							if rule.Kind == "porcentaje" {
-								<span>base { rule.BaselinePrice }</span>
+								<span>{ rule.Threshold } desde { rule.BaselinePrice }</span>
+							} else {
+								<span>{ rule.Direction } { rule.Threshold }</span>
 							}
 						</div>
 						<div class="rule-card__actions">

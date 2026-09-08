@@ -24,7 +24,7 @@ templ Dashboard(data DashboardData) {
 		<header class="dashboard__header">
 			<h1>Inicio</h1>
 			<a href="/alertas" class="dashboard__alerts" aria-label="Alertas">
-				<span class="dashboard__alerts-icon" aria-hidden="true">🔔</span>
+				<span class="dashboard__alerts-label">Alertas</span>
 				<span class="dashboard__alerts-count">{ fmt.Sprintf("%d", data.TriggeredAlertCount) }</span>
 				if data.AlertError {
 					<span class="dashboard__alerts-error">!</span>
@@ -58,7 +58,7 @@ templ Report(data ReportData) {
 		<header class="report__header">
 			<h1>{ data.Title }</h1>
 			if data.Date != "" {
-				<a href="/reporte" class="report__back">← Reporte actual</a>
+				<a href="/reporte" class="report__back">Reporte actual</a>
 			}
 		</header>
 		@Freshness(data.Freshness)
@@ -119,7 +119,7 @@ templ Watchlist(data WatchlistData) {
 templ AssetDetail(data AssetDetailData) {
 	<article class="asset">
 		<header class="asset__header">
-			<a href="/activos" class="asset__back">← Activos</a>
+			<a href="/activos" class="asset__back">Activos</a>
 			<h1>{ data.Label }</h1>
 			<span class="asset__symbol">{ data.Source }/{ data.Symbol }</span>
 		</header>

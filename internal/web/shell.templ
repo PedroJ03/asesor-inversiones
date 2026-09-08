@@ -45,19 +45,15 @@ templ Fragment(body templ.Component) {
 templ Nav(current string) {
 	<nav class="nav" aria-label="Principal">
 		<a href="/" class={ navItemClass(current, "inicio") } aria-current={ navAriaCurrent(current, "inicio") }>
-			<span class="nav__icon" aria-hidden="true">🏠</span>
 			<span class="nav__label">Inicio</span>
 		</a>
 		<a href="/reporte" class={ navItemClass(current, "reporte") } aria-current={ navAriaCurrent(current, "reporte") }>
-			<span class="nav__icon" aria-hidden="true">📊</span>
 			<span class="nav__label">Reporte</span>
 		</a>
 		<a href="/activos" class={ navItemClass(current, "activos") } aria-current={ navAriaCurrent(current, "activos") }>
-			<span class="nav__icon" aria-hidden="true">💼</span>
 			<span class="nav__label">Activos</span>
 		</a>
 		<a href="/alertas" class={ navItemClass(current, "alertas") } aria-current={ navAriaCurrent(current, "alertas") }>
-			<span class="nav__icon" aria-hidden="true">🔔</span>
 			<span class="nav__label">Alertas</span>
 		</a>
 	</nav>

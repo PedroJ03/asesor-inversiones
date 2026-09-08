@@ -105,11 +105,6 @@ body {
 	color: var(--accent);
 }
 
-.nav__icon {
-	font-size: 1.25rem;
-	line-height: 1;
-}
-
 .login {
 	max-width: 22rem;
 	margin: 2rem auto;
@@ -297,6 +292,10 @@ body {
 	font-weight: 600;
 }
 
+.dashboard__alerts-label {
+	font-size: 0.875rem;
+}
+
 .dashboard__alerts-count {
 	background: var(--danger);
 	color: #fff;
@@ -470,6 +469,18 @@ body {
 	color: var(--danger);
 	font-size: 0.875rem;
 	font-weight: 600;
+}
+
+.alerts__hint {
+	margin: 0 0 1rem;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+.rule-form__hint {
+	margin: 0.25rem 0 0;
+	font-size: 0.75rem;
+	color: var(--text-muted);
 }
 
 .alerts__section {
