@@ -72,6 +72,13 @@ func run() error {
 		allQuotes = append(allQuotes, res.Quotes...)
 	}
 
+	// Evaluate alert rules against the freshest stored quotes now that the
+	// provider quotes are saved. A failure here must never abort report
+	// generation: log it and keep going.
+	if err := evaluateAlerts(st); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: alert evaluation:", err)
+	}
+
 	reportTime := time.Now().In(arLocation())
 	data := render.FromQuotes(allQuotes, warnings, reportTime)
 	html, err := render.Render(data)
