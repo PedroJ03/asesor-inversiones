@@ -34,11 +34,11 @@ Chain strategy: pending
 
 ## Phase 2: Shell, Routing, Auth
 
-- [ ] 2.1 Pin templ v0.3.1020 in `go.mod`/`go.sum`; vendor htmx 2.0.10.
-- [ ] 2.2 Create `internal/web/auth.go`: `Authorizer` middleware, HMAC cookie, `WEB_AUTH_PASSWORD`/`WEB_SESSION_SECRET`, login; unauth: no data.
-- [ ] 2.3 Create `cmd/web/main.go`: composition, mux, shutdown, unauth `GET /healthz`.
-- [ ] 2.4 Create `internal/web/routes.go`: method-qualified dual registration (slash-less canonical) per design; route-table test asserts patterns (routing threat).
-- [ ] 2.5 Create `internal/web/shell_templ.go` + `internal/web/assets/`: `Shell`, `Nav`, embedded CSS, `HX-Request` fragments; commit `_templ.go`.
+- [x] 2.1 Pin templ v0.3.1020 in `go.mod`/`go.sum`; vendor htmx 2.0.10.
+- [x] 2.2 Create `internal/web/auth.go`: `Authorizer` middleware, HMAC cookie, `WEB_AUTH_PASSWORD`/`WEB_SESSION_SECRET`, login; unauth: no data.
+- [x] 2.3 Create `cmd/web/main.go`: composition, mux, shutdown, unauth `GET /healthz`.
+- [x] 2.4 Create `internal/web/routes.go`: method-qualified dual registration (slash-less canonical, e.g. both `GET /reporte` and `GET /reporte/{$}`) exactly per the design routing table; route-table test asserts patterns (routing threat).
+- [x] 2.5 Create `internal/web/shell_templ.go` + `internal/web/assets/`: `Shell`, `Nav`, embedded CSS, `HX-Request` fragments; commit `_templ.go`.
 
 ## Phase 3: Reading Views
 
