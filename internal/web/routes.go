@@ -41,6 +41,7 @@ func NewMux(deps Dependencies) *Mux {
 	mux.Handle("GET /sw.js", deps.Assets)
 
 	views := newViewServer(deps.Store, deps.Watchlist)
+	rules := newRuleServer(deps.Store, deps.Watchlist)
 
 	// Dashboard: exact root to avoid the catch-all subtree behavior of "/".
 	mux.Handle("GET /{$}", auth.Middleware(http.HandlerFunc(views.dashboardHandler)))
@@ -56,12 +57,12 @@ func NewMux(deps Dependencies) *Mux {
 	mux.Handle("GET /activos/{source}/{symbol}", auth.Middleware(http.HandlerFunc(views.assetDetailHandler)))
 
 	// Alerts: slash-less canonical plus exact slash-ful variant.
-	mux.Handle("GET /alertas", auth.Middleware(http.HandlerFunc(alertsHandler)))
-	mux.Handle("GET /alertas/{$}", auth.Middleware(http.HandlerFunc(alertsHandler)))
-	mux.Handle("POST /alertas/reglas/{$}", auth.Middleware(http.HandlerFunc(ruleCreateHandler)))
-	mux.Handle("PUT /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(ruleUpdateHandler)))
-	mux.Handle("DELETE /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(ruleDeleteHandler)))
-	mux.Handle("POST /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(ruleActionFallbackHandler)))
+	mux.Handle("GET /alertas", auth.Middleware(http.HandlerFunc(rules.alertsHandler)))
+	mux.Handle("GET /alertas/{$}", auth.Middleware(http.HandlerFunc(rules.alertsHandler)))
+	mux.Handle("POST /alertas/reglas/{$}", auth.Middleware(http.HandlerFunc(rules.ruleCreateHandler)))
+	mux.Handle("PUT /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(rules.ruleUpdateHandler)))
+	mux.Handle("DELETE /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(rules.ruleDeleteHandler)))
+	mux.Handle("POST /alertas/reglas/{id}", auth.Middleware(http.HandlerFunc(rules.ruleActionFallbackHandler)))
 
 	return &Mux{handler: mux}
 }
@@ -82,31 +83,4 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintln(w, "ok")
 }
 
-func alertsHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "alertas", "Alertas")
-}
 
-func ruleCreateHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-func ruleUpdateHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-func ruleDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-func ruleActionFallbackHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-func renderPlaceholder(w http.ResponseWriter, r *http.Request, current, title string) {
-	body := PlaceholderPage(title)
-	if RequestIsHX(r) {
-		_ = Fragment(body).Render(r.Context(), w)
-		return
-	}
-	_ = Shell(title, current, body).Render(r.Context(), w)
-}
