@@ -59,7 +59,7 @@ Stop the web binary and revert platform files; SQLite alert data and CLI reporti
 
 ## Success Criteria
 
-- [ ] Routes and auth seam render SQLite data with visible freshness state.
-- [ ] Rule CRUD compiles and uses the frozen contract after engine merge.
-- [ ] PWA assets, <200 KB first load, and near-zero blocking JS pass verification.
-- [ ] `go test ./...`, `go build ./...`, and `go vet ./...` pass without protected-file edits.
+- [x] Routes and auth seam render SQLite data with visible freshness state.
+- [x] Rule CRUD compiles and uses the frozen contract after engine merge.
+- [x] PWA assets, <200 KB first load, and near-zero blocking JS pass verification.
+- [x] `go test ./...`, `go build ./...`, and `go vet ./...` pass without protected-file edits.

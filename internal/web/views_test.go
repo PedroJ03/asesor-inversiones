@@ -182,6 +182,36 @@ func TestReportDated_NoDataReturns404(t *testing.T) {
 	}
 }
 
+func TestReportDated_AvailableDateRendersData(t *testing.T) {
+	reportDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	// Seed a quote whose fetched_at falls inside the requested date in the
+	// advisor's local timezone (America/Argentina/Buenos_Aires).
+	quotes := []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 1234.5, ChangePct: 1.5, Currency: "USD", FetchedAt: reportDate.Add(10 * time.Hour)},
+	}
+	s := testStore(t, quotes)
+	vs := testViewServer(t, s)
+
+	req := httptest.NewRequest("GET", "/reporte/2024-06-15", nil)
+	req.SetPathValue("date", "2024-06-15")
+	w := httptest.NewRecorder()
+	vs.reportDatedHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %q", http.StatusOK, w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "Reporte del 2024-06-15") {
+		t.Errorf("expected dated report title, got %q", body)
+	}
+	if !strings.Contains(body, "u$s 1.234,50") {
+		t.Errorf("expected seeded price to be rendered, got %q", body)
+	}
+	if !strings.Contains(body, "última actualización") {
+		t.Error("expected freshness label")
+	}
+}
+
 func TestWatchlist_GroupsBySection(t *testing.T) {
 	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 	s := testStore(t, []fetch.Quote{
@@ -207,6 +237,32 @@ func TestWatchlist_GroupsBySection(t *testing.T) {
 	}
 	if !strings.Contains(body, "última actualización") {
 		t.Error("expected freshness label")
+	}
+}
+
+func TestWatchlist_StaleQuoteRendersStaleWarning(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-25 * time.Hour)},
+	})
+	vs := testViewServer(t, s)
+
+	req := httptest.NewRequest("GET", "/activos", nil)
+	w := httptest.NewRecorder()
+	vs.watchlistHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %q", http.StatusOK, w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "freshness--stale") {
+		t.Error("expected stale freshness class")
+	}
+	if !strings.Contains(body, "desactualizada") {
+		t.Error("expected stale warning label")
+	}
+	if strings.Contains(body, "freshness--current") {
+		t.Error("stale quote must not render current freshness class")
 	}
 }
 

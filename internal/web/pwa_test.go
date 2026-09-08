@@ -192,7 +192,7 @@ func TestPWAFirstLoadBudget(t *testing.T) {
 		t.Fatalf("first-load budget exceeded: %d bytes (budget %d bytes)", total, budget)
 	}
 
-	t.Logf("first-load bytes: HTML=%d, total=%d, breakdown=%v", htmlBytes, total, breakdown)
+	t.Logf("first-load budget total: %d bytes (HTML=%d, breakdown=%v)", total, htmlBytes, breakdown)
 }
 
 func TestPWAHTMXScriptTagHasSRIAndDefer(t *testing.T) {
