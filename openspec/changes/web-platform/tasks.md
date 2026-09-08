@@ -42,11 +42,11 @@ Chain strategy: pending
 
 ## Phase 3: Reading Views
 
-- [ ] 3.1 Create `internal/web/format.go`: duplicate price/percent helpers + tests; never edit internal/render.
-- [ ] 3.2 Create `internal/web/freshness.go`: 24h threshold, current/stale/missing/unavailable states + tests.
-- [ ] 3.3 Dashboard `GET /` and `/reporte[/{date}]`: invalid date 400, unavailable 404, alert badge; tests.
-- [ ] 3.4 Watchlist `/activos` via `LatestSnapshots`; asset detail via `LatestQuote` + `QuoteHistory`; fragment/missing tests.
-- [ ] 3.5 Mobile CSS: ≤720px single column, bottom tabs (Inicio/Reporte/Activos/Alertas), cards <480px; `última actualización` prominent.
+- [x] 3.1 Create `internal/web/format.go`: duplicate price/percent helpers + tests; never edit internal/render.
+- [x] 3.2 Create `internal/web/freshness.go`: 24h threshold, current/stale/missing/unavailable states + tests.
+- [x] 3.3 Dashboard `GET /` and `/reporte[/{date}]`: invalid date 400, unavailable 404, alert badge; tests.
+- [x] 3.4 Watchlist `/activos` via `LatestSnapshots`; asset detail via `LatestQuote` + `QuoteHistory`; fragment/missing tests.
+- [x] 3.5 Mobile CSS: ≤720px single column, bottom tabs (Inicio/Reporte/Activos/Alertas), cards <480px; `última actualización` prominent.
 
 ## Phase 4: Rule Management
 

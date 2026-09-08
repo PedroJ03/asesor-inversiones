@@ -3,6 +3,9 @@ package web
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/PedroJ03/asesor-inversiones/internal/config"
+	"github.com/PedroJ03/asesor-inversiones/internal/store"
 )
 
 // Mux holds the configured HTTP router and its dependencies.
@@ -37,18 +40,20 @@ func NewMux(deps Dependencies) *Mux {
 	mux.Handle("GET /manifest.webmanifest", deps.Assets)
 	mux.Handle("GET /sw.js", deps.Assets)
 
+	views := newViewServer(deps.Store, deps.Watchlist)
+
 	// Dashboard: exact root to avoid the catch-all subtree behavior of "/".
-	mux.Handle("GET /{$}", auth.Middleware(http.HandlerFunc(dashboardHandler)))
+	mux.Handle("GET /{$}", auth.Middleware(http.HandlerFunc(views.dashboardHandler)))
 
 	// Report: slash-less canonical plus exact slash-ful variant.
-	mux.Handle("GET /reporte", auth.Middleware(http.HandlerFunc(reportCurrentHandler)))
-	mux.Handle("GET /reporte/{$}", auth.Middleware(http.HandlerFunc(reportCurrentHandler)))
-	mux.Handle("GET /reporte/{date}", auth.Middleware(http.HandlerFunc(reportDatedHandler)))
+	mux.Handle("GET /reporte", auth.Middleware(http.HandlerFunc(views.reportCurrentHandler)))
+	mux.Handle("GET /reporte/{$}", auth.Middleware(http.HandlerFunc(views.reportCurrentHandler)))
+	mux.Handle("GET /reporte/{date}", auth.Middleware(http.HandlerFunc(views.reportDatedHandler)))
 
 	// Watchlist: slash-less canonical plus exact slash-ful variant.
-	mux.Handle("GET /activos", auth.Middleware(http.HandlerFunc(watchlistHandler)))
-	mux.Handle("GET /activos/{$}", auth.Middleware(http.HandlerFunc(watchlistHandler)))
-	mux.Handle("GET /activos/{source}/{symbol}", auth.Middleware(http.HandlerFunc(assetDetailHandler)))
+	mux.Handle("GET /activos", auth.Middleware(http.HandlerFunc(views.watchlistHandler)))
+	mux.Handle("GET /activos/{$}", auth.Middleware(http.HandlerFunc(views.watchlistHandler)))
+	mux.Handle("GET /activos/{source}/{symbol}", auth.Middleware(http.HandlerFunc(views.assetDetailHandler)))
 
 	// Alerts: slash-less canonical plus exact slash-ful variant.
 	mux.Handle("GET /alertas", auth.Middleware(http.HandlerFunc(alertsHandler)))
@@ -65,6 +70,8 @@ func NewMux(deps Dependencies) *Mux {
 type Dependencies struct {
 	Authorizer Authorizer
 	Assets     http.Handler
+	Store      *store.Store
+	Watchlist  *config.Watchlist
 	// RenderLogin renders the login page; it is part of the auth seam so the
 	// authorizer never depends on concrete templates.
 	RenderLogin func(w http.ResponseWriter, r *http.Request, err string)
@@ -73,26 +80,6 @@ type Dependencies struct {
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = fmt.Fprintln(w, "ok")
-}
-
-func dashboardHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "inicio", "Inicio")
-}
-
-func reportCurrentHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "reporte", "Reporte")
-}
-
-func reportDatedHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "reporte", "Reporte histórico")
-}
-
-func watchlistHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "activos", "Activos")
-}
-
-func assetDetailHandler(w http.ResponseWriter, r *http.Request) {
-	renderPlaceholder(w, r, "activos", "Detalle de activo")
 }
 
 func alertsHandler(w http.ResponseWriter, r *http.Request) {

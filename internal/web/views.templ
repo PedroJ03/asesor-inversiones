@@ -1,0 +1,159 @@
+package web
+
+import (
+	"fmt"
+	"time"
+)
+
+templ Freshness(info FreshnessInfo) {
+	<div class={ info.Class() }>
+		<span class="freshness__label">última actualización</span>
+		if info.State == FreshnessMissing {
+			<span class="freshness__value">sin datos</span>
+		} else if info.State == FreshnessUnavailable {
+			<span class="freshness__value">no disponible</span>
+		} else {
+			<span class="freshness__value">{ info.TimestampFormatted() }</span>
+			<span class="freshness__state">{ info.Label() }</span>
+		}
+	</div>
+}
+
+templ Dashboard(data DashboardData) {
+	<article class="dashboard">
+		<header class="dashboard__header">
+			<h1>Inicio</h1>
+			<a href="/alertas" class="dashboard__alerts" aria-label="Alertas">
+				<span class="dashboard__alerts-icon" aria-hidden="true">🔔</span>
+				<span class="dashboard__alerts-count">{ fmt.Sprintf("%d", data.TriggeredAlertCount) }</span>
+				if data.AlertError {
+					<span class="dashboard__alerts-error">!</span>
+				}
+			</a>
+		</header>
+		@Freshness(data.Freshness)
+		<div class="dashboard__stats">
+			<div class="stat">
+				<span class="stat__value">{ fmt.Sprintf("%d", data.SectionCounts["yahoo"]) }</span>
+				<span class="stat__label">Acciones USA</span>
+			</div>
+			<div class="stat">
+				<span class="stat__value">{ fmt.Sprintf("%d", data.SectionCounts["dolarapi"]) }</span>
+				<span class="stat__label">Dólares</span>
+			</div>
+			<div class="stat">
+				<span class="stat__value">{ fmt.Sprintf("%d", data.SectionCounts["data912"]) }</span>
+				<span class="stat__label">Bonos</span>
+			</div>
+			<div class="stat">
+				<span class="stat__value">{ fmt.Sprintf("%d", data.SectionCounts["coingecko"]) }</span>
+				<span class="stat__label">Cripto</span>
+			</div>
+		</div>
+	</article>
+}
+
+templ Report(data ReportData) {
+	<article class="report">
+		<header class="report__header">
+			<h1>{ data.Title }</h1>
+			if data.Date != "" {
+				<a href="/reporte" class="report__back">← Reporte actual</a>
+			}
+		</header>
+		@Freshness(data.Freshness)
+		<div class="report__sections">
+			for _, sec := range data.Sections {
+				<section class="report__section">
+					<h2>{ sec.Name }</h2>
+					<div class="card-list">
+						for _, row := range sec.Rows {
+							<div class="card quote-card">
+								<div class="quote-card__main">
+									<span class="quote-card__label">{ row.Label }</span>
+									<span class="quote-card__price">{ row.Price }</span>
+									<span class={ row.PctClass }>{ row.Pct }</span>
+								</div>
+								<div class="quote-card__meta">
+									@Freshness(row.Freshness)
+								</div>
+							</div>
+						}
+					</div>
+				</section>
+			}
+		</div>
+	</article>
+}
+
+templ Watchlist(data WatchlistData) {
+	<article class="watchlist">
+		<header class="watchlist__header">
+			<h1>Activos</h1>
+		</header>
+		@Freshness(data.Freshness)
+		<div class="watchlist__sections">
+			for _, sec := range data.Sections {
+				<section class="watchlist__section">
+					<h2>{ sec.Name }</h2>
+					<div class="card-list">
+						for _, row := range sec.Rows {
+							<a href={ templ.SafeURL("/activos/" + row.Source + "/" + row.Symbol) } class="card quote-card">
+								<div class="quote-card__main">
+									<span class="quote-card__label">{ row.Label }</span>
+									<span class="quote-card__price">{ row.Price }</span>
+									<span class={ row.PctClass }>{ row.Pct }</span>
+								</div>
+								<div class="quote-card__meta">
+									@Freshness(row.Freshness)
+								</div>
+							</a>
+						}
+					</div>
+				</section>
+			}
+		</div>
+	</article>
+}
+
+templ AssetDetail(data AssetDetailData) {
+	<article class="asset">
+		<header class="asset__header">
+			<a href="/activos" class="asset__back">← Activos</a>
+			<h1>{ data.Label }</h1>
+			<span class="asset__symbol">{ data.Source }/{ data.Symbol }</span>
+		</header>
+		@Freshness(data.Freshness)
+		<div class="asset__summary card">
+			<div class="asset__price">
+				<span class="asset__amount">{ data.Price }</span>
+				<span class={ data.PctClass }>{ data.Pct }</span>
+			</div>
+			<div class="asset__bidask">
+				<span>Compra: <strong>{ data.Bid }</strong></span>
+				<span>Venta: <strong>{ data.Ask }</strong></span>
+			</div>
+		</div>
+		if len(data.History) > 0 {
+			<section class="asset__history">
+				<h2>Historial</h2>
+				<div class="card-list">
+					for _, p := range data.History {
+						<div class="card history-row">
+							<time datetime={ p.FetchedAt.Format(time.RFC3339) }>{ p.FetchedAt.In(arLocation).Format("02/01 15:04") }</time>
+							<span>{ p.Price }</span>
+						</div>
+					}
+				</div>
+			</section>
+		}
+	</article>
+}
+
+templ ErrorNotFound(message string) {
+	<article class="error-page">
+		<h1>No encontrado</h1>
+		<p>{ message }</p>
+		<a href="/" class="button">Volver al inicio</a>
+	</article>
+}
