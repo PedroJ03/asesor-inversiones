@@ -57,10 +57,10 @@ Chain strategy: pending
 
 ## Phase 5: PWA
 
-- [ ] 5.1 Add `manifest.webmanifest` + 192/512 maskable icons, embedded.
-- [ ] 5.2 Add `sw.js`: cache-first versioned shell assets, stale-while-revalidate documents, offline marker preserving timestamps/freshness.
-- [ ] 5.3 htmx SRI/defer; register service worker.
-- [ ] 5.4 Verify <200 KB first load, HTTPS installability (Lighthouse), JS-disabled HTML.
+- [x] 5.1 Add `manifest.webmanifest` + 192/512 maskable icons, embedded.
+- [x] 5.2 Add `sw.js`: cache-first versioned shell assets, stale-while-revalidate documents, offline marker preserving timestamps/freshness.
+- [x] 5.3 htmx SRI/defer; register service worker.
+- [x] 5.4 Verify <200 KB first load, HTTPS installability (Lighthouse), JS-disabled HTML.
 
 ## Phase 6: Docs/Final Gate
 

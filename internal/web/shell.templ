@@ -15,7 +15,9 @@ templ Shell(title string, current string, body templ.Component) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title } · asesor helper</title>
 			<link rel="stylesheet" href="/assets/main.css"/>
+			<link rel="manifest" href="/manifest.webmanifest"/>
 			<meta name="theme-color" content="#0f172a"/>
+			<script src="/assets/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous" defer></script>
 		</head>
 		<body>
 			<div class="shell">
@@ -27,6 +29,11 @@ templ Shell(title string, current string, body templ.Component) {
 				</main>
 				@Nav(current)
 			</div>
+			<script>
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker.register('/sw.js');
+				}
+			</script>
 		</body>
 	</html>
 }
