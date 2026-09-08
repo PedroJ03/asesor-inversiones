@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -56,30 +57,36 @@ templ Dashboard(data DashboardData) {
 templ Report(data ReportData) {
 	<article class="report">
 		<header class="report__header">
-			<h1>{ data.Title }</h1>
+			<div class="report__heading">
+				<h1>{ data.Title }</h1>
+				if data.Day != "" {
+					<p class="report__date">{ data.Day }</p>
+				}
+			</div>
 			if data.Date != "" {
 				<a href="/reporte" class="report__back">Reporte actual</a>
 			}
 		</header>
-		@Freshness(data.Freshness)
+		<div class="report__banner">
+			@Freshness(data.Freshness)
+		</div>
 		<div class="report__sections">
 			for _, sec := range data.Sections {
 				<section class="report__section">
 					<h2>{ sec.Name }</h2>
-					<div class="card-list">
+					<ul class="report-list">
 						for _, row := range sec.Rows {
-							<div class="card quote-card">
-								<div class="quote-card__main">
-									<span class="quote-card__label">{ row.Label }</span>
-									<span class="quote-card__price">{ row.Price }</span>
-									<span class={ row.PctClass }>{ row.Pct }</span>
-								</div>
-								<div class="quote-card__meta">
-									@Freshness(row.Freshness)
-								</div>
-							</div>
+							<li class="report-row">
+								<span class="report-row__label">{ row.Label }</span>
+								<span class="report-row__quote">
+									<span class="report-row__price">{ row.Price }</span>
+									if row.Pct != "" {
+										<span class={ "report-row__change", row.PctClass }>{ row.Pct }</span>
+									}
+								</span>
+							</li>
 						}
-					</div>
+					</ul>
 				</section>
 			}
 		</div>
@@ -96,20 +103,28 @@ templ Watchlist(data WatchlistData) {
 			for _, sec := range data.Sections {
 				<section class="watchlist__section">
 					<h2>{ sec.Name }</h2>
-					<div class="card-list">
+					<ul class="asset-list">
 						for _, row := range sec.Rows {
-							<a href={ templ.SafeURL("/activos/" + row.Source + "/" + row.Symbol) } class="card quote-card">
-								<div class="quote-card__main">
-									<span class="quote-card__label">{ row.Label }</span>
-									<span class="quote-card__price">{ row.Price }</span>
-									<span class={ row.PctClass }>{ row.Pct }</span>
-								</div>
-								<div class="quote-card__meta">
-									@Freshness(row.Freshness)
-								</div>
-							</a>
+							<li>
+								<a href={ templ.SafeURL("/activos/" + row.Source + "/" + row.Symbol) } class="asset-row">
+									<span class="asset-row__ident">
+										if strings.EqualFold(row.Label, row.Symbol) {
+											<span class="asset-row__symbol">{ row.Label }</span>
+										} else {
+											<span class="asset-row__symbol">{ row.Symbol }</span>
+											<span class="asset-row__name">{ row.Label }</span>
+										}
+									</span>
+									<span class="asset-row__quote">
+										<span class="asset-row__price">{ row.Price }</span>
+										if row.Pct != "" {
+											<span class={ "asset-row__change", row.PctClass }>{ row.Pct }</span>
+										}
+									</span>
+								</a>
+							</li>
 						}
-					</div>
+					</ul>
 				</section>
 			}
 		</div>

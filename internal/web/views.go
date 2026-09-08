@@ -47,8 +47,11 @@ type DashboardData struct {
 
 // ReportData feeds the report template.
 type ReportData struct {
-	Title     string
-	Date      string
+	Title string
+	// Date is the raw YYYY-MM-DD path date; empty for the current report.
+	Date string
+	// Day is the human-readable report date shown under the title.
+	Day       string
 	Freshness FreshnessInfo
 	Sections  []ReportSection
 }
@@ -147,7 +150,7 @@ func (vs *viewServer) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 
 func (vs *viewServer) reportCurrentHandler(w http.ResponseWriter, r *http.Request) {
 	now := vs.clock()
-	data := vs.buildReport("Reporte", now, "")
+	data := vs.buildReport("Reporte del día", now, "")
 	data = vs.fillReportCurrent(data, now)
 	vs.render(w, r, "reporte", "Reporte", Report(data))
 }
@@ -324,14 +327,14 @@ func watchlistSectionRows[T any](vs *viewServer, name string, items []T,
 func (vs *viewServer) watchlistRow(label string, key store.WebQuoteKey, snapshots map[store.WebQuoteKey]store.QuoteRecord, err error, now time.Time) (WatchlistRow, FreshnessInfo) {
 	if err != nil {
 		return WatchlistRow{
-			Label: label, Source: key.Source, Symbol: key.Symbol,
+			Label: label, Source: key.Source, Symbol: key.Symbol, Price: "—",
 			Freshness: FreshnessInfo{State: FreshnessUnavailable},
 		}, FreshnessInfo{State: FreshnessUnavailable}
 	}
 	rec, ok := snapshots[key]
 	if !ok {
 		return WatchlistRow{
-			Label: label, Source: key.Source, Symbol: key.Symbol,
+			Label: label, Source: key.Source, Symbol: key.Symbol, Price: "—",
 			Freshness: FreshnessInfo{State: FreshnessMissing},
 		}, FreshnessInfo{State: FreshnessMissing}
 	}
@@ -348,9 +351,17 @@ func (vs *viewServer) watchlistRow(label string, key store.WebQuoteKey, snapshot
 }
 
 func (vs *viewServer) buildReport(title string, now time.Time, date string) ReportData {
+	// The current report shows today's date; a dated report shows its own day.
+	day := now.In(arLocation).Format("02/01/2006")
+	if date != "" {
+		if d, err := time.Parse("2006-01-02", date); err == nil {
+			day = d.Format("02/01/2006")
+		}
+	}
 	return ReportData{
 		Title: title,
 		Date:  date,
+		Day:   day,
 	}
 }
 
@@ -427,14 +438,16 @@ func (vs *viewServer) fillReportCurrent(data ReportData, now time.Time) ReportDa
 func reportCurrentRow(label string, key store.WebQuoteKey, snapshots map[store.WebQuoteKey]store.QuoteRecord, err error, now time.Time) (ReportRow, FreshnessInfo) {
 	if err != nil {
 		return ReportRow{
-			Label: label, Price: "—", Pct: "—", PctClass: "negative",
+			Label:     label,
+			Price:     "—",
 			Freshness: FreshnessInfo{State: FreshnessUnavailable},
 		}, FreshnessInfo{State: FreshnessUnavailable}
 	}
 	rec, ok := snapshots[key]
 	if !ok {
 		return ReportRow{
-			Label: label, Price: "—", Pct: "—", PctClass: "positive",
+			Label:     label,
+			Price:     "—",
 			Freshness: FreshnessInfo{State: FreshnessMissing},
 		}, FreshnessInfo{State: FreshnessMissing}
 	}
@@ -469,13 +482,15 @@ func reportRowForPair(label string, source, symbol string, start, end time.Time,
 	history, err := s.QuoteHistory(source, symbol, start, end, 100)
 	if err != nil {
 		return ReportRow{
-			Label: label, Price: "—", Pct: "—", PctClass: "negative",
+			Label:     label,
+			Price:     "—",
 			Freshness: FreshnessInfo{State: FreshnessUnavailable},
 		}, FreshnessInfo{State: FreshnessUnavailable}
 	}
 	if len(history) == 0 {
 		return ReportRow{
-			Label: label, Price: "—", Pct: "—", PctClass: "positive",
+			Label:     label,
+			Price:     "—",
 			Freshness: FreshnessInfo{State: FreshnessMissing},
 		}, FreshnessInfo{State: FreshnessMissing}
 	}

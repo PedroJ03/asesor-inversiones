@@ -404,6 +404,169 @@ body {
 	font-weight: 600;
 }
 
+/* Watchlist: single-column list rows */
+.watchlist__sections,
+.report__sections {
+	max-width: 42rem;
+}
+
+.watchlist__section h2 {
+	margin: 1.5rem 0 0.25rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+
+.asset-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.asset-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.875rem 0.25rem;
+	border-bottom: 1px solid var(--border);
+	text-decoration: none;
+	color: inherit;
+}
+
+.asset-row__ident {
+	display: flex;
+	flex-direction: column;
+	gap: 0.125rem;
+	min-width: 0;
+}
+
+.asset-row__symbol {
+	font-weight: 700;
+}
+
+.asset-row__name {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.asset-row__quote {
+	display: flex;
+	align-items: baseline;
+	gap: 0.625rem;
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.asset-row__price {
+	font-size: 1.0625rem;
+	font-weight: 700;
+}
+
+.asset-row__change {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	padding: 0.125rem 0.5rem;
+	border-radius: 9999px;
+}
+
+.asset-row__change.positive {
+	background: #dcfce7;
+	color: #166534;
+}
+
+.asset-row__change.negative {
+	background: #fee2e2;
+	color: #991b1b;
+}
+
+/* Report: read brief with prominent header and freshness banner */
+.report__heading {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.report__header h1 {
+	font-size: 1.75rem;
+}
+
+.report__date {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+}
+
+.report__banner {
+	margin-bottom: 1.25rem;
+}
+
+.report__banner .freshness {
+	margin-bottom: 0;
+	font-size: 1rem;
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--border);
+	border-left-width: 4px;
+}
+
+.report-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	background: var(--surface);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+}
+
+.report-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--surface-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.report-row:last-child {
+	border-bottom: none;
+}
+
+.report-row__label {
+	font-weight: 600;
+	min-width: 0;
+}
+
+.report-row__quote {
+	display: flex;
+	align-items: baseline;
+	gap: 0.75rem;
+	flex-shrink: 0;
+}
+
+.report-row__price {
+	font-weight: 700;
+}
+
+.report-row__change {
+	font-size: 0.9375rem;
+	font-weight: 700;
+}
+
+.report-row__change.positive {
+	color: var(--success);
+}
+
+.report-row__change.negative {
+	color: var(--danger);
+}
+
 .asset__summary {
 	margin-top: 1rem;
 }
