@@ -23,7 +23,7 @@ Non-conflicting method-qualified patterns (`GET` also matches `HEAD`):
 
 | Pattern | Handler |
 |---|---|
-| `GET /` | dashboard |
+| `GET /{$}` | dashboard (exact root; a bare `GET /` is a catch-all subtree pattern in Go 1.22 muxing) |
 | `GET /reporte`, `GET /reporte/{$}` | current report; slash-less URL is canonical |
 | `GET /reporte/{date}` | dated report; invalid format → 400; valid but unavailable → controlled 404 in the platform shell |
 | `GET /activos`, `GET /activos/{$}` | watchlist; slash-less URL is canonical |
