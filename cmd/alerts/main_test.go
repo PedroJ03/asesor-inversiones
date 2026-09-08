@@ -56,7 +56,7 @@ cripto:
 func TestRunTriggersAndWarnings(t *testing.T) {
 	t.Parallel()
 	dbPath, s := newTestStore(t)
-	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	seedQuotes(t, s, []fetch.Quote{
 		{Source: "yahoo", Symbol: "SPY", Price: 605, FetchedAt: now},
@@ -140,6 +140,91 @@ func TestAddValidCapturesBaseline(t *testing.T) {
 	}
 	if rules[0].BaselinePrice != 600.5 {
 		t.Errorf("baseline: want 600.5, got %v", rules[0].BaselinePrice)
+	}
+}
+
+func TestAddPctCapturesBaseline(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 400, FetchedAt: now},
+	})
+
+	if err := runAdd([]string{
+		"-db", dbPath,
+		"-watchlist", wl,
+		"-source", "yahoo",
+		"-symbol", "SPY",
+		"-kind", "pct",
+		"-direction", "above",
+		"-threshold", "5",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 rule, got %d", len(rules))
+	}
+	if rules[0].Kind != "pct" {
+		t.Errorf("kind: want pct, got %s", rules[0].Kind)
+	}
+	if rules[0].BaselinePrice != 400 {
+		t.Errorf("baseline: want 400, got %v", rules[0].BaselinePrice)
+	}
+	if rules[0].State != "armed" {
+		t.Errorf("state: want armed, got %s", rules[0].State)
+	}
+}
+
+func TestPctEndToEnd(t *testing.T) {
+	t.Parallel()
+	dbPath, s := newTestStore(t)
+	wl := writeWatchlist(t, t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 400, FetchedAt: now},
+	})
+
+	if err := runAdd([]string{
+		"-db", dbPath,
+		"-watchlist", wl,
+		"-source", "yahoo",
+		"-symbol", "SPY",
+		"-kind", "pct",
+		"-direction", "above",
+		"-threshold", "5",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	seedQuotes(t, s, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 430, FetchedAt: now.Add(time.Hour)},
+	})
+
+	if err := runAlerts([]string{"-db", dbPath, "-max-age", "24h"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	history, err := s.History(10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("want 1 triggered alert, got %d", len(history))
+	}
+	if !history[0].ObservedChangePct.Valid {
+		t.Fatalf("observed change pct should be set for pct rule")
+	}
+	if history[0].ObservedChangePct.Float64 != 7.5 {
+		t.Errorf("observed change pct: want 7.5, got %v", history[0].ObservedChangePct.Float64)
 	}
 }
 
@@ -301,7 +386,7 @@ func TestListDisplaysState(t *testing.T) {
 func TestRemovePreservesHistory(t *testing.T) {
 	t.Parallel()
 	dbPath, s := newTestStore(t)
-	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
 	if err != nil {
@@ -351,7 +436,7 @@ func TestRemovePreservesHistory(t *testing.T) {
 func TestHistoryOutput(t *testing.T) {
 	t.Parallel()
 	dbPath, s := newTestStore(t)
-	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	ruleID, err := s.CreateRule("yahoo", "SPY", "value", "above", 600, 595, now)
 	if err != nil {
