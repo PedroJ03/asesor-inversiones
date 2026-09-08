@@ -23,7 +23,7 @@ Non-conflicting method-qualified patterns (`GET` also matches `HEAD`):
 
 | Pattern | Handler |
 |---|---|
-| `GET /` | dashboard |
+| `GET /{$}` | dashboard (exact root; a bare `GET /` is a catch-all subtree pattern in Go 1.22 muxing) |
 | `GET /reporte`, `GET /reporte/{$}` | current report; slash-less URL is canonical |
 | `GET /reporte/{date}` | dated report; invalid format → 400; valid but unavailable → controlled 404 in the platform shell |
 | `GET /activos`, `GET /activos/{$}` | watchlist; slash-less URL is canonical |
@@ -58,6 +58,14 @@ func (s *Store) QuoteHistory(source, symbol string, from, to time.Time, limit in
 ```
 
 The map distinguishes missing pairs from zero values; empty batches perform no query. History rejects invalid limits/ranges and orders by `fetched_at ASC, id ASC`.
+
+`internal/store/web_rule_writes.go` adds only:
+
+```go
+func (s *Store) SetRuleEnabled(id int64, enabled bool) error
+```
+
+This platform-owned additive write updates the `enabled` column without touching the frozen `store.go` contract or the rule's armed/triggered state.
 
 Components are `Shell`, `Nav`, `Freshness`, `Dashboard`, `Report`, `Watchlist`, `AssetDetail`, `Alerts`, and rule fragments. `HX-Request: true` selects a fragment; otherwise the shell renders. Freshness states are `current`, `stale`, `missing`, and `unavailable`, with `última actualización`. CSS keeps `asesor helper` properties without touching `internal/render/template.html`.
 
