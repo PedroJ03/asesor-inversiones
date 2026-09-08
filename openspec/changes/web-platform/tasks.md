@@ -28,9 +28,9 @@ Chain strategy: pending
 
 ## Phase 1: Read Layer
 
-- [ ] 1.1 Write `internal/store/web_reads_test.go`: newest-per-pair, missing isolated, empty batch no query.
-- [ ] 1.2 Create `internal/store/web_reads.go`: `WebQuoteKey`, limits 100/500, `LatestSnapshots` newest row per pair.
-- [ ] 1.3 Add `QuoteHistory`: reject bad ranges/limits; order `fetched_at ASC, id ASC`; range/bounds/determinism tests.
+- [x] 1.1 Write `internal/store/web_reads_test.go`: newest-per-pair, missing isolated, empty batch no query.
+- [x] 1.2 Create `internal/store/web_reads.go`: `WebQuoteKey`, limits 100/500, `LatestSnapshots` newest row per pair.
+- [x] 1.3 Add `QuoteHistory`: reject bad ranges/limits; order `fetched_at ASC, id ASC`; range/bounds/determinism tests.
 
 ## Phase 2: Shell, Routing, Auth
 
