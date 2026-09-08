@@ -64,5 +64,5 @@ Chain strategy: pending
 
 ## Phase 6: Docs/Final Gate
 
-- [ ] 6.1 Document run/deploy: env vars, Caddy proxy, tunnel fallback; rollback: stop binary.
-- [ ] 6.2 Final gate: `go test ./...`, `go build ./...`, `go vet ./...`; zero protected store/render/report edits.
+- [x] 6.1 Document run/deploy: env vars, Caddy proxy, tunnel fallback; rollback: stop binary.
+- [x] 6.2 Final gate: `go test ./...`, `go build ./...`, `go vet ./...`; zero protected store/render/report edits.
