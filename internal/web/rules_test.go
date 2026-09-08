@@ -1,0 +1,483 @@
+package web
+
+import (
+	"database/sql"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/PedroJ03/asesor-inversiones/internal/fetch"
+	"github.com/PedroJ03/asesor-inversiones/internal/store"
+)
+
+func testRuleServer(t *testing.T, s *store.Store) *ruleServer {
+	t.Helper()
+	rs := newRuleServer(s, testWatchlist())
+	rs.clock = func() time.Time {
+		return time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	}
+	return rs
+}
+
+func TestRuleServer_CreateRuleValid(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("source", "yahoo|SPY")
+	form.Set("kind", "value")
+	form.Set("direction", "above")
+	form.Set("threshold", "550")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	rs.ruleCreateHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+	loc := w.Header().Get("Location")
+	if loc != "/alertas" {
+		t.Fatalf("expected redirect to /alertas, got %q", loc)
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+	if rules[0].Source != "yahoo" || rules[0].Symbol != "SPY" {
+		t.Fatalf("unexpected rule pair: %s/%s", rules[0].Source, rules[0].Symbol)
+	}
+	if rules[0].BaselinePrice != 500 {
+		t.Fatalf("expected baseline 500, got %f", rules[0].BaselinePrice)
+	}
+}
+
+func TestRuleServer_CreateRuleNoBaseline(t *testing.T) {
+	s := testStore(t, nil)
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("source", "yahoo|SPY")
+	form.Set("kind", "value")
+	form.Set("direction", "above")
+	form.Set("threshold", "550")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	rs.ruleCreateHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "no hay cotizaci") {
+		t.Fatalf("expected baseline error message, got %q", body)
+	}
+	if strings.Contains(body, "creada") {
+		t.Error("error page must not claim success")
+	}
+}
+
+func TestRuleServer_CreateRuleDuplicate(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	rs := testRuleServer(t, s)
+
+	for i := 0; i < 2; i++ {
+		form := url.Values{}
+		form.Set("source", "yahoo|SPY")
+		form.Set("kind", "value")
+		form.Set("direction", "above")
+		form.Set("threshold", "550")
+
+		req := httptest.NewRequest("POST", "/alertas/reglas/", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		if i == 0 {
+			rs.ruleCreateHandler(w, req)
+			if w.Code != http.StatusSeeOther {
+				t.Fatalf("first create failed: %d", w.Code)
+			}
+			continue
+		}
+		rs.ruleCreateHandler(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected bad request for duplicate, got %d", w.Code)
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "Ya existe") {
+			t.Fatalf("expected duplicate error, got %q", body)
+		}
+		if strings.Contains(body, "creada") {
+			t.Error("error page must not claim success")
+		}
+	}
+}
+
+func TestRuleServer_CreateRuleInvalidThreshold(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("source", "yahoo|SPY")
+	form.Set("kind", "value")
+	form.Set("direction", "above")
+	form.Set("threshold", "-10")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	rs.ruleCreateHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "umbral") {
+		t.Fatalf("expected threshold error, got %q", body)
+	}
+}
+
+func TestRuleServer_CreateRuleHtmxFragment(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("source", "yahoo|SPY")
+	form.Set("kind", "pct")
+	form.Set("direction", "above")
+	form.Set("threshold", "5")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	w := httptest.NewRecorder()
+	rs.ruleCreateHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected fragment OK, got %d: %q", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<!doctype html>") {
+		t.Error("fragment must not contain full html document")
+	}
+	if !strings.Contains(body, "Reglas") {
+		t.Error("expected rules section")
+	}
+	if !strings.Contains(body, "base") {
+		t.Error("expected percent baseline to be shown")
+	}
+}
+
+func TestRuleServer_AlertsPageRendersRulesAndHistory(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	_, err = s.CreateRule("dolarapi", "blue", "pct", "above", 5, 1200, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	_, err = s.InsertAlert(store.Alert{
+		RuleID:      sql.NullInt64{Int64: 1, Valid: true},
+		Source:      "yahoo",
+		Symbol:      "SPY",
+		Kind:        "value",
+		Threshold:   550,
+		TriggeredAt: now.Add(-30 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("insert alert: %v", err)
+	}
+
+	rs := testRuleServer(t, s)
+	req := httptest.NewRequest("GET", "/alertas", nil)
+	w := httptest.NewRecorder()
+	rs.alertsHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %q", http.StatusOK, w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{"S and P 500", "blue", "Reglas", "Historial reciente", "<!doctype html>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected body to contain %q", want)
+		}
+	}
+}
+
+func TestRuleServer_AlertsFragment(t *testing.T) {
+	s := testStore(t, nil)
+	rs := testRuleServer(t, s)
+
+	req := httptest.NewRequest("GET", "/alertas", nil)
+	req.Header.Set("HX-Request", "true")
+	w := httptest.NewRecorder()
+	rs.alertsHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<!doctype html>") {
+		t.Error("fragment must not contain full html document")
+	}
+	if !strings.Contains(body, "Alertas") {
+		t.Error("expected alerts content")
+	}
+}
+
+func TestRuleServer_UpdateState(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	id, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("state", "triggered")
+
+	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleUpdateHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 1 || rules[0].ID != id {
+		t.Fatalf("expected rule %d, got %+v", id, rules)
+	}
+	if rules[0].State != "triggered" {
+		t.Fatalf("expected state triggered, got %q", rules[0].State)
+	}
+}
+
+func TestRuleServer_UpdateStateHtmxFragment(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("state", "armed")
+
+	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleUpdateHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected fragment OK, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<!doctype html>") {
+		t.Error("fragment must not contain full html document")
+	}
+}
+
+func TestRuleServer_DeleteRulePreservesHistory(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	id, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	_, err = s.InsertAlert(store.Alert{
+		RuleID:      sql.NullInt64{Int64: id, Valid: true},
+		Source:      "yahoo",
+		Symbol:      "SPY",
+		Kind:        "value",
+		Threshold:   550,
+		TriggeredAt: now.Add(-30 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("insert alert: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	req := httptest.NewRequest("DELETE", "/alertas/reglas/1", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleDeleteHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected rule removed, got %d", len(rules))
+	}
+
+	history, err := s.History(10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected history preserved, got %d", len(history))
+	}
+}
+
+func TestRuleServer_FallbackPostDisable(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("action", "deshabilitar")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleActionFallbackHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if rules[0].State != "triggered" {
+		t.Fatalf("expected state triggered, got %q", rules[0].State)
+	}
+}
+
+func TestRuleServer_FallbackPostDelete(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("action", "eliminar")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleActionFallbackHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected rule removed, got %d", len(rules))
+	}
+}
+
+func TestRuleServer_FallbackPostUnknownAction(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("action", "desconocida")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleActionFallbackHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d", w.Code)
+	}
+}
+
+func TestRuleServer_ParseAssetValue(t *testing.T) {
+	cases := []struct {
+		in            string
+		wantSource    string
+		wantSymbol    string
+	}{
+		{"yahoo|SPY", "yahoo", "SPY"},
+		{"dolarapi|blue", "dolarapi", "blue"},
+		{"", "", ""},
+		{"invalid", "", ""},
+	}
+	for _, tc := range cases {
+		source, symbol := parseAssetValue(tc.in)
+		if source != tc.wantSource || symbol != tc.wantSymbol {
+			t.Errorf("parseAssetValue(%q) = %q,%q; want %q,%q", tc.in, source, symbol, tc.wantSource, tc.wantSymbol)
+		}
+	}
+}
+
+func TestRuleServer_ClassifyRuleError(t *testing.T) {
+	cases := []struct {
+		in   error
+		want string
+	}{
+		{store.ErrInvalidRule, "no es válida"},
+		{store.ErrDuplicateRule, "Ya existe"},
+		{errors.New("db down"), "No se pudo guardar"},
+	}
+	for _, tc := range cases {
+		got := classifyRuleError(tc.in)
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("classifyRuleError(%v) = %q; want containing %q", tc.in, got, tc.want)
+		}
+	}
+}

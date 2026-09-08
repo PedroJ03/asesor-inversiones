@@ -50,10 +50,10 @@ Chain strategy: pending
 
 ## Phase 4: Rule Management
 
-- [ ] 4.1 Verify frozen contract; consume directly, no substitutes/seeds.
-- [ ] 4.2 Alerts `/alertas`: `ListRules(false)` + bounded `History`; armed/triggered, pct baseline; tests.
-- [ ] 4.3 Create rule `POST /alertas/reglas/{$}`, PRG; `ErrInvalidRule`/`ErrDuplicateRule` → safe HTML errors; tests.
-- [ ] 4.4 Rule actions: `PUT`/`DELETE /alertas/reglas/{id}`, no-JS `POST` fallback (`action=deshabilitar|eliminar`), PRG; htmx fragments; test verbs, history preserved.
+- [x] 4.1 Verify frozen contract; consume directly, no substitutes/seeds.
+- [x] 4.2 Alerts `/alertas`: `ListRules(false)` + bounded `History`; armed/triggered, pct baseline; tests.
+- [x] 4.3 Create rule `POST /alertas/reglas/{$}`, PRG; `ErrInvalidRule`/`ErrDuplicateRule` → safe HTML errors; tests.
+- [x] 4.4 Rule actions: `PUT`/`DELETE /alertas/reglas/{id}`, no-JS `POST` fallback (`action=deshabilitar|eliminar`), PRG; htmx fragments; test verbs, history preserved.
 
 ## Phase 5: PWA
 

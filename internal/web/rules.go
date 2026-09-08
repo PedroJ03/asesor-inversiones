@@ -1,0 +1,448 @@
+package web
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/a-h/templ"
+	"github.com/PedroJ03/asesor-inversiones/internal/config"
+	"github.com/PedroJ03/asesor-inversiones/internal/store"
+)
+
+// DefaultAlertsHistoryLimit is the number of recent alert snapshots shown on
+// the alerts page.
+const DefaultAlertsHistoryLimit = 50
+
+// ruleServer holds the dependencies for alert-rule handlers.
+type ruleServer struct {
+	store     *store.Store
+	watchlist *config.Watchlist
+	clock     func() time.Time
+}
+
+func newRuleServer(s *store.Store, wl *config.Watchlist) *ruleServer {
+	return &ruleServer{
+		store:     s,
+		watchlist: wl,
+		clock:     time.Now,
+	}
+}
+
+// RuleView is a presentation-friendly alert rule.
+type RuleView struct {
+	ID            int64
+	Source        string
+	Symbol        string
+	Label         string
+	Kind          string
+	Direction     string
+	Threshold     string
+	BaselinePrice string
+	Enabled       bool
+	State         string
+	StateClass    string
+}
+
+// AlertView is a presentation-friendly triggered alert snapshot.
+type AlertView struct {
+	Source      string
+	Symbol      string
+	Kind        string
+	Threshold   string
+	TriggeredAt string
+}
+
+// WatchlistOption is one selectable asset in the rule creation form.
+type WatchlistOption struct {
+	Source string
+	Symbol string
+	Label  string
+}
+
+// RuleFormData carries the rule creation form state and any validation error.
+type RuleFormData struct {
+	Source    string
+	Symbol    string
+	Kind      string
+	Direction string
+	Threshold string
+	Error     string
+	Options   []WatchlistOption
+}
+
+// AlertsData feeds the alerts page template.
+type AlertsData struct {
+	Rules   []RuleView
+	History []AlertView
+	Form    RuleFormData
+	Error   string
+}
+
+func (rs *ruleServer) alertsHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := rs.buildAlertsData(r, RuleFormData{})
+	if err != nil {
+		data = AlertsData{Error: ruleListErrorMessage(err)}
+	}
+	rs.render(w, r, "alertas", "Alertas", Alerts(data))
+}
+
+func (rs *ruleServer) ruleCreateHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		rs.renderFormError(w, r, RuleFormData{Error: "El formulario no pudo leerse."})
+		return
+	}
+
+	form := rs.parseRuleForm(r)
+	if form.Error != "" {
+		rs.renderFormError(w, r, form)
+		return
+	}
+
+	baseline, err := rs.baselineFor(form.Source, form.Symbol)
+	if err != nil {
+		form.Error = err.Error()
+		rs.renderFormError(w, r, form)
+		return
+	}
+
+	threshold, err := strconv.ParseFloat(form.Threshold, 64)
+	if err != nil || threshold <= 0 {
+		form.Error = "El umbral debe ser un número positivo."
+		rs.renderFormError(w, r, form)
+		return
+	}
+
+	_, err = rs.store.CreateRule(form.Source, form.Symbol, form.Kind, form.Direction, threshold, baseline, rs.clock())
+	if err != nil {
+		form.Error = classifyRuleError(err)
+		rs.renderFormError(w, r, form)
+		return
+	}
+
+	if RequestIsHX(r) {
+		data, err := rs.buildAlertsData(r, RuleFormData{})
+		if err != nil {
+			data = AlertsData{Error: ruleListErrorMessage(err)}
+		}
+		_ = Fragment(Alerts(data)).Render(r.Context(), w)
+		return
+	}
+	http.Redirect(w, r, "/alertas", http.StatusSeeOther)
+}
+
+func (rs *ruleServer) ruleUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	id, ok := rs.parseID(r)
+	if !ok {
+		rs.renderActionError(w, r, "Identificador de regla inválido.")
+		return
+	}
+
+	state := strings.TrimSpace(r.FormValue("state"))
+	if state != "armed" && state != "triggered" {
+		rs.renderActionError(w, r, "Estado inválido.")
+		return
+	}
+
+	if err := rs.store.UpdateRuleState(id, state); err != nil {
+		rs.renderActionError(w, r, classifyRuleError(err))
+		return
+	}
+
+	if RequestIsHX(r) {
+		data, err := rs.buildAlertsData(r, RuleFormData{})
+		if err != nil {
+			data = AlertsData{Error: ruleListErrorMessage(err)}
+		}
+		_ = Fragment(Alerts(data)).Render(r.Context(), w)
+		return
+	}
+	http.Redirect(w, r, "/alertas", http.StatusSeeOther)
+}
+
+func (rs *ruleServer) ruleDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	id, ok := rs.parseID(r)
+	if !ok {
+		rs.renderActionError(w, r, "Identificador de regla inválido.")
+		return
+	}
+
+	if err := rs.store.RemoveRule(id); err != nil {
+		rs.renderActionError(w, r, classifyRuleError(err))
+		return
+	}
+
+	if RequestIsHX(r) {
+		data, err := rs.buildAlertsData(r, RuleFormData{})
+		if err != nil {
+			data = AlertsData{Error: ruleListErrorMessage(err)}
+		}
+		_ = Fragment(Alerts(data)).Render(r.Context(), w)
+		return
+	}
+	http.Redirect(w, r, "/alertas", http.StatusSeeOther)
+}
+
+func (rs *ruleServer) ruleActionFallbackHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		rs.renderActionError(w, r, "El formulario no pudo leerse.")
+		return
+	}
+
+	action := strings.TrimSpace(r.FormValue("action"))
+	switch action {
+	case "deshabilitar":
+		// The frozen contract exposes state updates; "deshabilitar" transitions
+		// an armed rule to triggered, removing it from the active watch.
+		rs.disableRule(w, r)
+	case "eliminar":
+		rs.deleteRule(w, r)
+	default:
+		rs.renderActionError(w, r, "Acción no reconocida.")
+	}
+}
+
+func (rs *ruleServer) disableRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := rs.parseID(r)
+	if !ok {
+		rs.renderActionError(w, r, "Identificador de regla inválido.")
+		return
+	}
+
+	if err := rs.store.UpdateRuleState(id, "triggered"); err != nil {
+		rs.renderActionError(w, r, classifyRuleError(err))
+		return
+	}
+	http.Redirect(w, r, "/alertas", http.StatusSeeOther)
+}
+
+func (rs *ruleServer) deleteRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := rs.parseID(r)
+	if !ok {
+		rs.renderActionError(w, r, "Identificador de regla inválido.")
+		return
+	}
+
+	if err := rs.store.RemoveRule(id); err != nil {
+		rs.renderActionError(w, r, classifyRuleError(err))
+		return
+	}
+	http.Redirect(w, r, "/alertas", http.StatusSeeOther)
+}
+
+func (rs *ruleServer) parseID(r *http.Request) (int64, bool) {
+	raw := r.PathValue("id")
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func (rs *ruleServer) parseRuleForm(r *http.Request) RuleFormData {
+	source, symbol := parseAssetValue(r.FormValue("source"))
+	form := RuleFormData{
+		Source:    source,
+		Symbol:    symbol,
+		Kind:      strings.TrimSpace(r.FormValue("kind")),
+		Direction: strings.TrimSpace(r.FormValue("direction")),
+		Threshold: strings.TrimSpace(r.FormValue("threshold")),
+		Options:   rs.watchlistOptions(),
+	}
+
+	if form.Source == "" || form.Symbol == "" {
+		form.Error = "Seleccioná un activo."
+		return form
+	}
+	if !rs.validPair(form.Source, form.Symbol) {
+		form.Error = "El activo seleccionado no está en la lista."
+		return form
+	}
+	if form.Kind != "value" && form.Kind != "pct" {
+		form.Error = "El tipo de alerta debe ser valor o porcentaje."
+		return form
+	}
+	if form.Direction != "above" && form.Direction != "below" {
+		form.Error = "La dirección debe ser mayor o menor que."
+		return form
+	}
+	if form.Threshold == "" {
+		form.Error = "Ingresá un umbral."
+	}
+	return form
+}
+
+func (rs *ruleServer) baselineFor(source, symbol string) (float64, error) {
+	quote, found, err := rs.store.LatestQuote(source, symbol)
+	if err != nil {
+		return 0, fmt.Errorf("no se pudo leer la cotización actual: %v", err)
+	}
+	if !found {
+		return 0, errors.New("no hay cotización actual para ese activo.")
+	}
+	if quote.Price <= 0 {
+		return 0, errors.New("la cotización actual no es válida.")
+	}
+	return quote.Price, nil
+}
+
+func (rs *ruleServer) buildAlertsData(r *http.Request, form RuleFormData) (AlertsData, error) {
+	rules, err := rs.store.ListRules(false)
+	if err != nil {
+		return AlertsData{}, err
+	}
+
+	history, err := rs.store.History(DefaultAlertsHistoryLimit)
+	if err != nil {
+		return AlertsData{}, err
+	}
+
+	if form.Options == nil {
+		form.Options = rs.watchlistOptions()
+	}
+
+	return AlertsData{
+		Rules:   rs.ruleViews(rules),
+		History: rs.alertViews(history),
+		Form:    form,
+	}, nil
+}
+
+func (rs *ruleServer) ruleViews(rules []store.Rule) []RuleView {
+	out := make([]RuleView, 0, len(rules))
+	for _, rule := range rules {
+		label := assetLabel(rs.watchlist, rule.Source, rule.Symbol)
+		kindLabel := "valor"
+		if rule.Kind == "pct" {
+			kindLabel = "porcentaje"
+		}
+		directionLabel := "mayor a"
+		if rule.Direction == "below" {
+			directionLabel = "menor a"
+		}
+		stateClass := "rule__state--armed"
+		if rule.State == "triggered" {
+			stateClass = "rule__state--triggered"
+		}
+
+		threshold := FormatPrice(rule.Threshold, "USD")
+		if rule.Kind == "pct" {
+			threshold = FormatPercent(rule.Threshold)
+		}
+
+		out = append(out, RuleView{
+			ID:            rule.ID,
+			Source:        rule.Source,
+			Symbol:        rule.Symbol,
+			Label:         label,
+			Kind:          kindLabel,
+			Direction:     directionLabel,
+			Threshold:     threshold,
+			BaselinePrice: FormatPrice(rule.BaselinePrice, "USD"),
+			Enabled:       rule.Enabled,
+			State:         rule.State,
+			StateClass:    stateClass,
+		})
+	}
+	return out
+}
+
+func (rs *ruleServer) alertViews(alerts []store.Alert) []AlertView {
+	out := make([]AlertView, 0, len(alerts))
+	for _, a := range alerts {
+		threshold := FormatPrice(a.Threshold, "USD")
+		if a.Kind == "pct" {
+			threshold = FormatPercent(a.Threshold)
+		}
+		out = append(out, AlertView{
+			Source:      a.Source,
+			Symbol:      a.Symbol,
+			Kind:        a.Kind,
+			Threshold:   threshold,
+			TriggeredAt: a.TriggeredAt.In(arLocation).Format("02/01 15:04"),
+		})
+	}
+	return out
+}
+
+func (rs *ruleServer) watchlistOptions() []WatchlistOption {
+	var opts []WatchlistOption
+	for _, a := range rs.watchlist.USA {
+		opts = append(opts, WatchlistOption{Source: "yahoo", Symbol: a.Symbol, Label: a.Label})
+	}
+	for _, d := range rs.watchlist.Dolares {
+		opts = append(opts, WatchlistOption{Source: "dolarapi", Symbol: d, Label: d})
+	}
+	for _, b := range rs.watchlist.Bonos {
+		opts = append(opts, WatchlistOption{Source: "data912", Symbol: b, Label: b})
+	}
+	for _, c := range rs.watchlist.Cripto {
+		opts = append(opts, WatchlistOption{Source: "coingecko", Symbol: c.ID, Label: c.Label})
+	}
+	return opts
+}
+
+func (rs *ruleServer) validPair(source, symbol string) bool {
+	for _, opt := range rs.watchlistOptions() {
+		if opt.Source == source && opt.Symbol == symbol {
+			return true
+		}
+	}
+	return false
+}
+
+func (rs *ruleServer) render(w http.ResponseWriter, r *http.Request, current, title string, body templ.Component) {
+	if RequestIsHX(r) {
+		_ = Fragment(body).Render(r.Context(), w)
+		return
+	}
+	_ = Shell(title, current, body).Render(r.Context(), w)
+}
+
+func (rs *ruleServer) renderFormError(w http.ResponseWriter, r *http.Request, form RuleFormData) {
+	data, err := rs.buildAlertsData(r, form)
+	if err != nil {
+		data = AlertsData{Error: ruleListErrorMessage(err), Form: form}
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	rs.render(w, r, "alertas", "Alertas", Alerts(data))
+}
+
+func (rs *ruleServer) renderActionError(w http.ResponseWriter, r *http.Request, message string) {
+	data, err := rs.buildAlertsData(r, RuleFormData{})
+	if err != nil {
+		data = AlertsData{Error: ruleListErrorMessage(err)}
+	}
+	data.Error = message
+	w.WriteHeader(http.StatusBadRequest)
+	rs.render(w, r, "alertas", "Alertas", Alerts(data))
+}
+
+func parseAssetValue(raw string) (source, symbol string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(raw, "|", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+func classifyRuleError(err error) string {
+	if errors.Is(err, store.ErrInvalidRule) {
+		return "La regla no es válida. Revisá los datos e intentá de nuevo."
+	}
+	if errors.Is(err, store.ErrDuplicateRule) {
+		return "Ya existe una regla igual para ese activo."
+	}
+	return "No se pudo guardar la regla. Intentá de nuevo."
+}
+
+func ruleListErrorMessage(err error) string {
+	return "No se pudo cargar el listado de alertas."
+}
