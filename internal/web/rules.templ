@@ -87,6 +87,9 @@ templ RulesList(rules []RuleView) {
 						<div class="rule-card__main">
 							<span class="rule-card__label">{ rule.Label }</span>
 							<span class={ "rule-card__state", rule.StateClass }>{ rule.State }</span>
+							if !rule.Enabled {
+								<span class={ "rule-card__state", rule.EnabledClass }>deshabilitada</span>
+							}
 						</div>
 						<div class="rule-card__details">
 							<span>{ rule.Direction } { rule.Threshold }</span>
@@ -95,28 +98,48 @@ templ RulesList(rules []RuleView) {
 							}
 						</div>
 						<div class="rule-card__actions">
-							if rule.State == "armed" {
+							if rule.Enabled {
 								<button
 									type="button"
 									class="button button--small"
 									hx-put={ fmt.Sprintf("/alertas/reglas/%d", rule.ID) }
-									hx-vals='{"state":"triggered"}'
+									hx-vals='{"enabled":"false"}'
 									hx-target=".alerts"
 									hx-swap="outerHTML"
 								>
 									Deshabilitar
 								</button>
+								<form
+									method="post"
+									action={ templ.SafeURL(fmt.Sprintf("/alertas/reglas/%d", rule.ID)) }
+									class="rule-card__disable-form"
+								>
+									<input type="hidden" name="action" value="deshabilitar"/>
+									<noscript>
+										<button type="submit" class="button button--small">Deshabilitar</button>
+									</noscript>
+								</form>
 							} else {
 								<button
 									type="button"
 									class="button button--small"
 									hx-put={ fmt.Sprintf("/alertas/reglas/%d", rule.ID) }
-									hx-vals='{"state":"armed"}'
+									hx-vals='{"enabled":"true"}'
 									hx-target=".alerts"
 									hx-swap="outerHTML"
 								>
 									Reactivar
 								</button>
+								<form
+									method="post"
+									action={ templ.SafeURL(fmt.Sprintf("/alertas/reglas/%d", rule.ID)) }
+									class="rule-card__enable-form"
+								>
+									<input type="hidden" name="action" value="habilitar"/>
+									<noscript>
+										<button type="submit" class="button button--small">Reactivar</button>
+									</noscript>
+								</form>
 							}
 							<form
 								method="post"
@@ -128,16 +151,6 @@ templ RulesList(rules []RuleView) {
 							>
 								<input type="hidden" name="action" value="eliminar"/>
 								<button type="submit" class="button button--small button--danger">Eliminar</button>
-							</form>
-							<form
-								method="post"
-								action={ templ.SafeURL(fmt.Sprintf("/alertas/reglas/%d", rule.ID)) }
-								class="rule-card__disable-form"
-							>
-								<input type="hidden" name="action" value="deshabilitar"/>
-								<noscript>
-									<button type="submit" class="button button--small">Deshabilitar</button>
-								</noscript>
 							</form>
 						</div>
 					</li>

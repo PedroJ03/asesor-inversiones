@@ -599,6 +599,11 @@ body {
 	color: #991b1b;
 }
 
+.rule__state--disabled {
+	background: #f1f5f9;
+	color: #475569;
+}
+
 .rule-card__details {
 	display: flex;
 	flex-wrap: wrap;

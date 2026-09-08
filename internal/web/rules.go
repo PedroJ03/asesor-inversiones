@@ -43,6 +43,7 @@ type RuleView struct {
 	Threshold     string
 	BaselinePrice string
 	Enabled       bool
+	EnabledClass  string
 	State         string
 	StateClass    string
 }
@@ -141,13 +142,16 @@ func (rs *ruleServer) ruleUpdateHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	state := strings.TrimSpace(r.FormValue("state"))
-	if state != "armed" && state != "triggered" {
+	// The PUT endpoint toggles the rule's enabled flag. This keeps the
+	// armed/triggered state intact so a disabled rule is not misclassified as
+	// triggered.
+	enabled, err := parseEnabledValue(r.FormValue("enabled"))
+	if err != nil {
 		rs.renderActionError(w, r, "Estado inválido.")
 		return
 	}
 
-	if err := rs.store.UpdateRuleState(id, state); err != nil {
+	if err := rs.store.SetRuleEnabled(id, enabled); err != nil {
 		rs.renderActionError(w, r, classifyRuleError(err))
 		return
 	}
@@ -195,9 +199,13 @@ func (rs *ruleServer) ruleActionFallbackHandler(w http.ResponseWriter, r *http.R
 	action := strings.TrimSpace(r.FormValue("action"))
 	switch action {
 	case "deshabilitar":
-		// The frozen contract exposes state updates; "deshabilitar" transitions
-		// an armed rule to triggered, removing it from the active watch.
-		rs.disableRule(w, r)
+		// Disabling a rule sets enabled=0 while preserving its armed/triggered
+		// state; it is not mapped to the triggered state hack anymore.
+		rs.setRuleEnabled(w, r, false)
+	case "habilitar":
+		// Re-enabling a rule sets enabled=1, making it active again without
+		// changing its armed/triggered state.
+		rs.setRuleEnabled(w, r, true)
 	case "eliminar":
 		rs.deleteRule(w, r)
 	default:
@@ -205,14 +213,14 @@ func (rs *ruleServer) ruleActionFallbackHandler(w http.ResponseWriter, r *http.R
 	}
 }
 
-func (rs *ruleServer) disableRule(w http.ResponseWriter, r *http.Request) {
+func (rs *ruleServer) setRuleEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	id, ok := rs.parseID(r)
 	if !ok {
 		rs.renderActionError(w, r, "Identificador de regla inválido.")
 		return
 	}
 
-	if err := rs.store.UpdateRuleState(id, "triggered"); err != nil {
+	if err := rs.store.SetRuleEnabled(id, enabled); err != nil {
 		rs.renderActionError(w, r, classifyRuleError(err))
 		return
 	}
@@ -327,6 +335,10 @@ func (rs *ruleServer) ruleViews(rules []store.Rule) []RuleView {
 		if rule.State == "triggered" {
 			stateClass = "rule__state--triggered"
 		}
+		enabledClass := "rule__state--enabled"
+		if !rule.Enabled {
+			enabledClass = "rule__state--disabled"
+		}
 
 		threshold := FormatPrice(rule.Threshold, "USD")
 		if rule.Kind == "pct" {
@@ -343,6 +355,7 @@ func (rs *ruleServer) ruleViews(rules []store.Rule) []RuleView {
 			Threshold:     threshold,
 			BaselinePrice: FormatPrice(rule.BaselinePrice, "USD"),
 			Enabled:       rule.Enabled,
+			EnabledClass:  enabledClass,
 			State:         rule.State,
 			StateClass:    stateClass,
 		})
@@ -431,6 +444,19 @@ func parseAssetValue(raw string) (source, symbol string) {
 		return "", ""
 	}
 	return parts[0], parts[1]
+}
+
+// parseEnabledValue interprets the enabled form value used by the rule
+// toggle endpoints. It only accepts explicit "true" or "false" strings.
+func parseEnabledValue(raw string) (bool, error) {
+	switch strings.TrimSpace(raw) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.New("invalid enabled value")
+	}
 }
 
 func classifyRuleError(err error) string {

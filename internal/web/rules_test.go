@@ -253,7 +253,7 @@ func TestRuleServer_AlertsFragment(t *testing.T) {
 	}
 }
 
-func TestRuleServer_UpdateState(t *testing.T) {
+func TestRuleServer_DisableViaPut(t *testing.T) {
 	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 	s := testStore(t, nil)
 	id, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
@@ -263,7 +263,7 @@ func TestRuleServer_UpdateState(t *testing.T) {
 	rs := testRuleServer(t, s)
 
 	form := url.Values{}
-	form.Set("state", "triggered")
+	form.Set("enabled", "false")
 
 	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -282,12 +282,52 @@ func TestRuleServer_UpdateState(t *testing.T) {
 	if len(rules) != 1 || rules[0].ID != id {
 		t.Fatalf("expected rule %d, got %+v", id, rules)
 	}
-	if rules[0].State != "triggered" {
-		t.Fatalf("expected state triggered, got %q", rules[0].State)
+	if rules[0].Enabled {
+		t.Fatalf("expected rule disabled")
+	}
+	if rules[0].State != "armed" {
+		t.Fatalf("expected state unchanged armed, got %q", rules[0].State)
 	}
 }
 
-func TestRuleServer_UpdateStateHtmxFragment(t *testing.T) {
+func TestRuleServer_EnableViaPut(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	id, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	if err := s.SetRuleEnabled(id, false); err != nil {
+		t.Fatalf("disable rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("enabled", "true")
+
+	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleUpdateHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if !rules[0].Enabled {
+		t.Fatalf("expected rule enabled")
+	}
+	if rules[0].State != "armed" {
+		t.Fatalf("expected state unchanged armed, got %q", rules[0].State)
+	}
+}
+
+func TestRuleServer_DisableHtmxFragment(t *testing.T) {
 	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 	s := testStore(t, nil)
 	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
@@ -297,7 +337,7 @@ func TestRuleServer_UpdateStateHtmxFragment(t *testing.T) {
 	rs := testRuleServer(t, s)
 
 	form := url.Values{}
-	form.Set("state", "armed")
+	form.Set("enabled", "false")
 
 	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -312,6 +352,46 @@ func TestRuleServer_UpdateStateHtmxFragment(t *testing.T) {
 	body := w.Body.String()
 	if strings.Contains(body, "<!doctype html>") {
 		t.Error("fragment must not contain full html document")
+	}
+	if !strings.Contains(body, "deshabilitada") {
+		t.Error("expected disabled chip in fragment")
+	}
+	if !strings.Contains(body, "Reactivar") {
+		t.Error("expected re-enable affordance in fragment")
+	}
+}
+
+func TestRuleServer_EnableHtmxFragment(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	if err := s.SetRuleEnabled(1, false); err != nil {
+		t.Fatalf("disable rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("enabled", "true")
+
+	req := httptest.NewRequest("PUT", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleUpdateHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected fragment OK, got %d: %q", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<!doctype html>") {
+		t.Error("fragment must not contain full html document")
+	}
+	if !strings.Contains(body, "Deshabilitar") {
+		t.Error("expected disable affordance in fragment")
 	}
 }
 
@@ -387,8 +467,48 @@ func TestRuleServer_FallbackPostDisable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list rules: %v", err)
 	}
-	if rules[0].State != "triggered" {
-		t.Fatalf("expected state triggered, got %q", rules[0].State)
+	if rules[0].Enabled {
+		t.Fatalf("expected rule disabled")
+	}
+	if rules[0].State != "armed" {
+		t.Fatalf("expected state unchanged armed, got %q", rules[0].State)
+	}
+}
+
+func TestRuleServer_FallbackPostEnable(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, nil)
+	_, err := s.CreateRule("yahoo", "SPY", "value", "above", 550, 500, now)
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	if err := s.SetRuleEnabled(1, false); err != nil {
+		t.Fatalf("disable rule: %v", err)
+	}
+	rs := testRuleServer(t, s)
+
+	form := url.Values{}
+	form.Set("action", "habilitar")
+
+	req := httptest.NewRequest("POST", "/alertas/reglas/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	rs.ruleActionFallbackHandler(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %q", w.Code, w.Body.String())
+	}
+
+	rules, err := s.ListRules(false)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	if !rules[0].Enabled {
+		t.Fatalf("expected rule enabled")
+	}
+	if rules[0].State != "armed" {
+		t.Fatalf("expected state unchanged armed, got %q", rules[0].State)
 	}
 }
 
