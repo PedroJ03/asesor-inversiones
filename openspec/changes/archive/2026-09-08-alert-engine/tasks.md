@@ -47,7 +47,7 @@ Refs — R1 persist · R2 baseline · R3 list/remove · R4 thresholds · R5 stat
 
 ## Phase 4: Merge order
 
-- [ ] 4.1 Merge PR1 → tracker; retarget PR2 → tracker; merge PR2 → tracker; then tracker → `main` only.
+- [x] 4.1 Merge PR1 → tracker; retarget PR2 → tracker; merge PR2 → tracker; then tracker → `main` only.
 
 ## Guardrails
 
