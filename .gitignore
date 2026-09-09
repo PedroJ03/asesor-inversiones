@@ -1,4 +1,5 @@
 reporte/
 *.db
+*.db-shm
+*.db-wal
 bin/
-informe-apis-financieras.*

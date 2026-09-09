@@ -148,6 +148,82 @@ func TestReportCurrent_RendersSections(t *testing.T) {
 	}
 }
 
+// TestReportCurrent_DifferentiatedBrief checks the report reads as a daily
+// brief: explicit day header, prominent freshness banner, signed change
+// emphasis, and no per-asset navigation links.
+func TestReportCurrent_DifferentiatedBrief(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	vs := testViewServer(t, s)
+
+	req := httptest.NewRequest("GET", "/reporte", nil)
+	w := httptest.NewRecorder()
+	vs.reportCurrentHandler(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{"Reporte del día", "15/06/2024", "report__banner", "report-list", "+1,20 %"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected body to contain %q", want)
+		}
+	}
+	if strings.Contains(body, `href="/activos/`) {
+		t.Error("report rows must not link to asset detail")
+	}
+}
+
+// TestWatchlist_RendersListRowsWithDetailLinks checks the redesigned
+// single-column asset list: full-row links, symbol/name split, price and
+// change chip on the right.
+func TestWatchlist_RendersListRowsWithDetailLinks(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	s := testStore(t, []fetch.Quote{
+		{Source: "yahoo", Symbol: "SPY", Price: 500, ChangePct: 1.2, Currency: "USD", FetchedAt: now.Add(-1 * time.Hour)},
+	})
+	vs := testViewServer(t, s)
+
+	req := httptest.NewRequest("GET", "/activos", nil)
+	w := httptest.NewRecorder()
+	vs.watchlistHandler(w, req)
+
+	body := w.Body.String()
+	for _, want := range []string{
+		`class="asset-row"`,
+		`href="/activos/yahoo/SPY"`,
+		"asset-row__symbol", "SPY",
+		"asset-row__name", "S and P 500",
+		"u$s 500,00",
+		"asset-row__change", "+1,20 %",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected body to contain %q", want)
+		}
+	}
+	if strings.Contains(body, "quote-card") {
+		t.Error("watchlist must not render the old card grid")
+	}
+}
+
+// TestWatchlist_MissingQuoteRendersDash checks that a missing quote shows a
+// dash placeholder instead of an empty price cell.
+func TestWatchlist_MissingQuoteRendersDash(t *testing.T) {
+	s := testStore(t, nil)
+	vs := testViewServer(t, s)
+
+	req := httptest.NewRequest("GET", "/activos", nil)
+	w := httptest.NewRecorder()
+	vs.watchlistHandler(w, req)
+
+	body := w.Body.String()
+	if !strings.Contains(body, "asset-row__price") {
+		t.Fatal("expected asset row markup")
+	}
+	if !strings.Contains(body, ">—</span>") {
+		t.Errorf("expected dash placeholder for missing quotes, got %q", body)
+	}
+}
+
 func TestReportDated_InvalidDateReturns400(t *testing.T) {
 	s := testStore(t, nil)
 	vs := testViewServer(t, s)
@@ -203,6 +279,9 @@ func TestReportDated_AvailableDateRendersData(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, "Reporte del 2024-06-15") {
 		t.Errorf("expected dated report title, got %q", body)
+	}
+	if !strings.Contains(body, "15/06/2024") {
+		t.Errorf("expected human-readable day under the title, got %q", body)
 	}
 	if !strings.Contains(body, "u$s 1.234,50") {
 		t.Errorf("expected seeded price to be rendered, got %q", body)

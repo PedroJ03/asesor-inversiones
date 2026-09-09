@@ -84,7 +84,7 @@ type AlertsData struct {
 }
 
 func (rs *ruleServer) alertsHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := rs.buildAlertsData(r, RuleFormData{})
+	data, err := rs.buildAlertsData(r, rs.formDataFromQuery(r))
 	if err != nil {
 		data = AlertsData{Error: ruleListErrorMessage(err)}
 	}
@@ -110,7 +110,7 @@ func (rs *ruleServer) ruleCreateHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	threshold, err := strconv.ParseFloat(form.Threshold, 64)
+	threshold, err := strconv.ParseFloat(normalizeThreshold(form.Threshold), 64)
 	if err != nil || threshold <= 0 {
 		form.Error = "El umbral debe ser un número positivo."
 		rs.renderFormError(w, r, form)
@@ -283,6 +283,26 @@ func (rs *ruleServer) parseRuleForm(r *http.Request) RuleFormData {
 	return form
 }
 
+// formDataFromQuery rebuilds the rule form state from GET query parameters.
+// It backs the no-JS-friendly re-render of the form when the kind changes
+// (?kind=pct): htmx re-requests the page with the current form values so the
+// direction labels match the selected kind without losing input.
+func (rs *ruleServer) formDataFromQuery(r *http.Request) RuleFormData {
+	q := r.URL.Query()
+	if q.Get("source") == "" && q.Get("kind") == "" && q.Get("direction") == "" && q.Get("threshold") == "" {
+		return RuleFormData{}
+	}
+	source, symbol := parseAssetValue(q.Get("source"))
+	return RuleFormData{
+		Source:    source,
+		Symbol:    symbol,
+		Kind:      strings.TrimSpace(q.Get("kind")),
+		Direction: strings.TrimSpace(q.Get("direction")),
+		Threshold: strings.TrimSpace(q.Get("threshold")),
+		Options:   rs.watchlistOptions(),
+	}
+}
+
 func (rs *ruleServer) baselineFor(source, symbol string) (float64, error) {
 	quote, found, err := rs.store.LatestQuote(source, symbol)
 	if err != nil {
@@ -342,7 +362,13 @@ func (rs *ruleServer) ruleViews(rules []store.Rule) []RuleView {
 
 		threshold := FormatPrice(rule.Threshold, "USD")
 		if rule.Kind == "pct" {
-			threshold = FormatPercent(rule.Threshold)
+			// The direction is embedded in the threshold label so the rules
+			// list reads as one condition: ">= 2,00 % desde u$s 118,50".
+			op := "≥"
+			if rule.Direction == "below" {
+				op = "≤"
+			}
+			threshold = fmt.Sprintf("%s %s %%", op, formatNumber(rule.Threshold, 2))
 		}
 
 		out = append(out, RuleView{
@@ -432,6 +458,35 @@ func (rs *ruleServer) renderActionError(w http.ResponseWriter, r *http.Request, 
 	data.Error = message
 	w.WriteHeader(http.StatusBadRequest)
 	rs.render(w, r, "alertas", "Alertas", Alerts(data))
+}
+
+// normalizeThreshold prepares a user-entered threshold for ParseFloat: it
+// trims surrounding spaces, strips trivially attached currency markers copied
+// along with a price, and accepts "," as the decimal separator.
+func normalizeThreshold(raw string) string {
+	s := strings.TrimSpace(raw)
+	for _, marker := range []string{"u$s", "US$", "USD", "usd", "ARS", "ars", "$"} {
+		s = strings.TrimSpace(strings.ReplaceAll(s, marker, ""))
+	}
+	return strings.ReplaceAll(s, ",", ".")
+}
+
+// directionAboveLabel returns the above-direction label for a rule kind.
+// Percentage rules compare drift against the captured baseline, so the label
+// speaks of movement rather than absolute price.
+func directionAboveLabel(kind string) string {
+	if kind == "pct" {
+		return "Sube al menos"
+	}
+	return "Mayor o igual que"
+}
+
+// directionBelowLabel returns the below-direction label for a rule kind.
+func directionBelowLabel(kind string) string {
+	if kind == "pct" {
+		return "Baja al menos"
+	}
+	return "Menor o igual que"
 }
 
 func parseAssetValue(raw string) (source, symbol string) {
